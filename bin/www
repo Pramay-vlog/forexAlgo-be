@@ -1,0 +1,78 @@
+const app = require("../app");
+const http = require("http");
+const env = require('../config/env.config');
+const connectdb = require("../config/db.config");
+const { logger } = require('../helpers');
+const tcpClient = require("../service/tcp/tcpClient.service");
+
+// Get port from environment and store in Express.
+const port = normalizePort(env.PORT);
+app.set('port', port);
+
+// Create HTTP server.
+const server = http.createServer(app);
+
+connectdb.then((connection) => {
+    logger.info(`✔ DATABASE CONNECTED`);
+
+    server.listen(port);
+    server.on('error', onError);
+    server.on('listening', onListening);
+
+}).catch((error) => {
+    logger.error('✘ DATABASE CONNECTION FAILED');
+    throw error; //! this will stop the server if database connection failed
+});
+
+// Normalize a port into a number, string, or false.
+function normalizePort(val) {
+    var port = parseInt(val, 10);
+
+    if (isNaN(port)) {
+        // named pipe
+        return val;
+    }
+
+    if (port >= 0) {
+        // port number
+        return port;
+    }
+
+    return false;
+}
+
+// Event listener for HTTP server 'error' event.
+function onError(error) {
+    if (error.syscall !== "listen") {
+        throw error;
+    }
+
+    var bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+
+    // handle specific listen errors with friendly messages
+    switch (error.code) {
+        case "EACCES":
+            console.error(bind + " requires elevated privileges");
+            process.exit(1);
+            break;
+        case "EADDRINUSE":
+            console.error(bind + " is already in use");
+            process.exit(1);
+            break;
+        default:
+            throw error;
+    }
+}
+
+// Event listener for HTTP server 'listening' event.
+async function onListening() {
+    logger.verbose("Server running on http://127.0.0.1:" + port + "/api/v1");
+    tcpClient.connectToDLL(); // Connect to DLL server
+
+    // const io = new Server(server, {
+    //   cors: {
+    //     origin: "*", // allow to server to accept request from different origin
+    //   },
+    // });
+    // require("../controllers/chat/chat.socket")(io);
+}

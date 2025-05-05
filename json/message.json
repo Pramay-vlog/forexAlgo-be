@@ -1,0 +1,17 @@
+{
+    "TOKEN_REQUIRED": "Token required.",
+    "INVALID_TOKEN": "Invalid token.",
+    "UNAUTHORIZED": "Unauthorized.",
+    "INTERNAL_SERVER_ERROR": "Internal server error.",
+    "DUPLICATE_KEY": "Duplicate key.",
+
+    "SUCCESS": "Success.",
+    "FAILED": "Failed.",
+    "NOT_FOUND": "Not found.",
+    
+    "INVALID_PASSWORD": "Invalid password.",
+    "EMAIL_ALREADY_EXISTS": "Email already exists.",
+    "INVALID_ROLE": "Invalid role.",
+    "OTP_EXPIRED": "OTP expired.",
+    "INVALID_FILE": "File upload error."
+}
