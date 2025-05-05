@@ -3,7 +3,7 @@ const { logger } = require("../../helpers");
 const { handlePriceUpdate } = require("../strategy/strategy.service");
 const { redis } = require("../../config/redis.config");
 
-const TCP_HOST = "127.0.0.1";
+const TCP_HOST = "0.0.0.0";
 const TCP_PORT = 5050;
 
 let client = null;
