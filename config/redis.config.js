@@ -2,7 +2,7 @@ const Redis = require("ioredis");
 const { logger } = require("../helpers");
 
 // Create a single shared Redis instance
-const redis = new Redis(); // defaults to 127.0.0.1:6379
+const redis = new Redis(process.env.REDIS_URL);
 
 redis.on("connect", () => {
     logger.info("✔ [Redis] Connected successfully");
