@@ -12,6 +12,7 @@ const envschema = Joi.object({
     JSON_BODY_LIMIT: Joi.string().trim().required(),
 
     MONGODB_URI: Joi.string().trim().required(),
+    REDIS_URL: Joi.string().trim().required(),
     BASE_URL: Joi.string().trim().default(`/api/v1`),
 
     JWT_SECRET: Joi.string().trim().required(),

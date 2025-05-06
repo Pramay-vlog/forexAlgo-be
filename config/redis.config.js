@@ -1,9 +1,8 @@
 const Redis = require("ioredis");
 const { logger } = require("../helpers");
+const env = require("../config/env.config");
 
-console.log("🥇🥇🥇🥇 REDIS_URL:", process.env.REDIS_URL);
-
-const redis = new Redis(process.env.REDIS_URL, {
+const redis = new Redis(env.REDIS_URL, {
     maxRetriesPerRequest: null, // disables the 20-retry limit (be careful with this in prod)
     enableOfflineQueue: true,   // allows queueing commands while Redis is reconnecting
     reconnectOnError: (err) => {
