@@ -67,7 +67,7 @@ function onError(error) {
 // Event listener for HTTP server 'listening' event.
 async function onListening() {
     logger.verbose("Server running on http://127.0.0.1:" + port + "/api/v1");
-    tcpClient.connectToDLL(); // Connect to DLL server
+    tcpClient.startTCPServer(); // Connect to DLL server
 
     // const io = new Server(server, {
     //   cors: {

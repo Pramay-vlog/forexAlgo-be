@@ -1,94 +1,65 @@
 const net = require("net");
 const { logger } = require("../../helpers");
 const { handlePriceUpdate } = require("../strategy/strategy.service");
-const { redis } = require("../../config/redis.config");
 
-const TCP_HOST = "0.0.0.0";
 const TCP_PORT = 5050;
 
-let client = null;
-
-const ACTIVE_SYMBOLS_KEY = "active:symbols";
-
-const tcpClient = {
-  connectToDLL: () => {
-    client = new net.Socket();
-
-    client.connect(TCP_PORT, TCP_HOST, () => {
-      logger.info(`✔ [TCP] Connected to DLL on ${TCP_HOST}:${TCP_PORT}`);
-    });
+function startTCPServer() {
+  const server = net.createServer((socket) => {
+    logger.info("📡 [TCP] DLL connected.");
 
     let buffer = "";
 
-    client.on("data", (data) => {
+    socket.on("data", (data) => {
       buffer += data.toString();
 
-      const delimiter = "\n";
-      const parts = buffer.split(delimiter);
+      const parts = buffer.split("\n");
       buffer = parts.pop();
 
-      for (let message of parts) {
-        const sanitized = message.replace(/\0/g, "").trim();
-
+      for (let msg of parts) {
         try {
+          const sanitized = msg.replace(/\0/g, "").trim();
           if (sanitized) {
             const json = JSON.parse(sanitized);
             handlePriceUpdate(json);
           }
-        } catch (e) {
-          console.error("❌ JSON Parse Error:", e.message);
-          console.error("Offending message:", sanitized);
+        } catch (err) {
+          logger.error("❌ JSON parse error:", err.message);
         }
       }
     });
 
-    client.on("close", () => {
-      logger.warn("🛜 [TCP] Connection closed. Reconnecting...");
-      setTimeout(() => tcpClient.connectToDLL(), 1000);
+    socket.on("close", () => {
+      logger.warn("❌ [TCP] DLL disconnected.");
     });
 
-    client.on("error", (err) => {
-      logger.error(`❌ [TCP] Connection error: ${err.message}`);
+    socket.on("error", (err) => {
+      logger.error("⚠️ [TCP] Error:", err.message);
     });
-  },
 
-  getClient: () => {
-    if (!client) {
-      logger.error("❌ [TCP] Client is not connected. Please connect first.");
-      return null;
-    }
-    return client;
-  },
+    // Expose the active socket globally
+    global.dllSocket = socket;
+  });
 
-  sendMessageToDLL: (jsonObject) => {
-    const client = tcpClient.getClient();
-    if (client && !client.destroyed) {
-      const message = JSON.stringify(jsonObject);
-      client.write(message + "\n");
-      logger.info(`➡️ [TCP] Sent to DLL: ${message}`);
-      return true;
-    } else {
-      logger.error("❌ [TCP] DLL connection not established!");
-      return false;
-    }
-  },
+  server.listen(TCP_PORT, "0.0.0.0", () => {
+    logger.info(`🚀 [TCP] Server listening on 0.0.0.0:${TCP_PORT}`);
+  });
+}
 
-  // Redis-backed symbol tracking
-  addActiveSymbol: async (symbol) => {
-    await redis.sadd(ACTIVE_SYMBOLS_KEY, symbol);
-  },
+function sendMessageToDLL(jsonObject) {
+  const socket = global.dllSocket;
+  if (socket && !socket.destroyed) {
+    const message = JSON.stringify(jsonObject);
+    socket.write(message + "\n");
+    logger.info(`➡️ [TCP] Sent to DLL: ${message}`);
+    return true;
+  } else {
+    logger.error("❌ [TCP] No DLL connection to send message.");
+    return false;
+  }
+}
 
-  removeActiveSymbol: async (symbol) => {
-    await redis.srem(ACTIVE_SYMBOLS_KEY, symbol);
-  },
-
-  isSymbolActive: async (symbol) => {
-    return await redis.sismember(ACTIVE_SYMBOLS_KEY, symbol);
-  },
-
-  getActiveSymbols: async () => {
-    return await redis.smembers(ACTIVE_SYMBOLS_KEY);
-  },
+module.exports = {
+  startTCPServer,
+  sendMessageToDLL
 };
-
-module.exports = tcpClient;
