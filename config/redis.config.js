@@ -1,8 +1,23 @@
 const Redis = require("ioredis");
 const { logger } = require("../helpers");
 
-// Create a single shared Redis instance
-const redis = new Redis(process.env.REDIS_URL);
+const redis = new Redis(process.env.REDIS_URL, {
+    maxRetriesPerRequest: null, // disables the 20-retry limit (be careful with this in prod)
+    enableOfflineQueue: true,   // allows queueing commands while Redis is reconnecting
+    reconnectOnError: (err) => {
+        const targetError = "READONLY";
+        if (err.message.includes(targetError)) {
+            logger.warn("Reconnect on error: READONLY");
+            return true; // try reconnecting
+        }
+        return false;
+    },
+    retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000); // exponential backoff up to 2 seconds
+        logger.warn(`Retrying Redis connection in ${delay}ms`);
+        return delay;
+    },
+});
 
 redis.on("connect", () => {
     logger.info("✔ [Redis] Connected successfully");
@@ -12,22 +27,6 @@ redis.on("error", (err) => {
     logger.error("❌ [Redis] Connection error:", err);
 });
 
-// Optional: Utility functions for symbol config
-const setSymbolConfig = async (symbol, config) => {
-    await redis.hset(`symbol:${symbol}`, config);
-};
-
-const getSymbolConfig = async (symbol) => {
-    return await redis.hgetall(`symbol:${symbol}`);
-};
-
-const deleteSymbolConfig = async (symbol) => {
-    return await redis.del(`symbol:${symbol}`);
-};
-
 module.exports = {
-    redis,
-    setSymbolConfig,
-    getSymbolConfig,
-    deleteSymbolConfig,
+    redis
 };
