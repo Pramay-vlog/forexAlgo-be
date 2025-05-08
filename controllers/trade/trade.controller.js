@@ -70,7 +70,7 @@ module.exports = {
     },
 
     getTradeData: async (req, res) => {
-        const activeSymbols = await DB.TRADE.find().lean();
+        const activeSymbols = await DB.TRADE.find().sort({ createdAt: -1 }).lean();
         if (!activeSymbols || activeSymbols.length === 0) return response.NOT_FOUND({ res, message: "No Trade Data Found" });
 
         return response.OK({
