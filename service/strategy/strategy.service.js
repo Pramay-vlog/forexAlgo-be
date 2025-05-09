@@ -8,7 +8,8 @@ let ECLIPSE_BUFFER = 0.30;
 const TRADE_HISTORY_QUEUE = "queue:trade_history";
 
 function floorCheckpoint(price) {
-    return Math.floor(price);
+    // return Math.floor(price);
+    return price;
 }
 
 function generateCheckpointRange(cp) {
