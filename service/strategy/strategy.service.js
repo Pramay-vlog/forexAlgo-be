@@ -8,8 +8,7 @@ let ECLIPSE_BUFFER = 0.30;
 const TRADE_HISTORY_QUEUE = "queue:trade_history";
 
 function floorCheckpoint(price) {
-    // return Math.floor(price);
-    return price;
+    return Math.floor(price);
 }
 
 function generateCheckpointRange(cp) {
@@ -54,8 +53,7 @@ async function sendTrade(symbol, price, direction) {
             price,
             GAP,
             ECLIPSE_BUFFER,
-            // checkpoint: parseInt(checkpoint.current) || 0,
-            checkpoint: checkpoint.current || 0,
+            checkpoint: parseInt(checkpoint.current) || 0,
             initialTraded: checkpoint.initialTraded === "1",
             direction: checkpoint.direction || "",
             nonce,
@@ -68,8 +66,7 @@ async function sendTrade(symbol, price, direction) {
             price,
             action: direction,
             direction: checkpoint.direction || "",
-            // checkpoint: parseInt(checkpoint.current) || 0,
-            checkpoint: checkpoint.current || 0,
+            checkpoint: parseInt(checkpoint.current) || 0,
             createdAt: new Date()
         }));
 
@@ -105,8 +102,7 @@ async function handlePriceUpdate(data) {
             return;
         }
 
-        // const current = parseInt(redisCheckpoint.current);
-        const current = redisCheckpoint.current;
+        const current = parseInt(redisCheckpoint.current);
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
 
