@@ -168,19 +168,17 @@ async function handlePriceUpdate(data) {
             if (closestCP && cpDirection === "BUY" && closestCP > current) {
                 logger.warn('UPDATE CP BUY: Price >= Next CP');
                 await updateCheckpoint(closestCP, "BUY", false);
-            } else if (flooredPrice < current) {
+            } else if (price <= current) {  // Reversal: crossed below current checkpoint
                 logger.warn('EXIT BUY : ENTER SELL');
-                const newCP = Math.floor(price);
-                await updateCheckpoint(newCP, "SELL", true);
+                await updateCheckpoint(current, "SELL", true); // Use current CP as trade price
             }
         } else if (direction === "SELL") {
             if (closestCP && cpDirection === "SELL" && closestCP < current) {
                 logger.warn('UPDATE CP SELL: Price <= Prev CP');
                 await updateCheckpoint(closestCP, "SELL", false);
-            } else if (flooredPrice > current) {
+            } else if (price >= current) {  // Reversal: crossed above current checkpoint
                 logger.warn('EXIT SELL : ENTER BUY');
-                const newCP = Math.floor(price);
-                await updateCheckpoint(newCP, "BUY", true);
+                await updateCheckpoint(current, "BUY", true); // Use current CP as trade price
             }
         }
 
