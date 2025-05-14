@@ -91,7 +91,8 @@ async function handlePriceUpdate(data) {
         if (typeof dynamicGAP === "number" && dynamicGAP > 0) GAP = dynamicGAP;
         if (typeof dynamicEclipseBuffer === "number" && dynamicEclipseBuffer > 0) ECLIPSE_BUFFER = dynamicEclipseBuffer;
 
-        const price = parseFloat(bid);
+        const buyPrice = roundTo3(ask);
+        const price = roundTo3(bid);
         const redisKey = `checkpoint:${symbol}`;
 
         let redisCheckpoint = await redis.hgetall(redisKey);
@@ -111,7 +112,7 @@ async function handlePriceUpdate(data) {
         const { prevs, nexts } = generateCheckpointRange(current);
         const updateCheckpoint = async (updatedCP, newDirection, shouldTrade = true) => {
             await redis.hset(redisKey, {
-                current: roundTo3(updatedCP),
+                current: updatedCP,
                 direction: newDirection,
                 initialTraded: 1
             });
@@ -119,7 +120,7 @@ async function handlePriceUpdate(data) {
             const next = nexts[0];
             const prev = prevs[prevs.length - 1];
             logger.info(`🔁 ${symbol}: ${price} | Checkpoint Updated | Current: ${updatedCP} | Prev: ${prev} | Next: ${next}`);
-            const tradePrice = newDirection === "BUY" ? parseFloat(ask) : price;
+            const tradePrice = newDirection === "BUY" ? buyPrice : price;
 
             if (shouldTrade) {
                 sendTrade(symbol, tradePrice, newDirection);
@@ -140,8 +141,8 @@ async function handlePriceUpdate(data) {
         if (!initialTraded) {
             if (Math.abs(price - current) >= ECLIPSE_BUFFER) {
                 const initialDirection = price > current ? "BUY" : "SELL";
-                const tradePrice = initialDirection === "BUY" ? parseFloat(ask) : price;
-                const initialCP = roundTo3(tradePrice);
+                const tradePrice = initialDirection === "BUY" ? buyPrice : price;
+                const initialCP = tradePrice;
                 await redis.hset(redisKey, {
                     current: initialCP,
                     direction: initialDirection,
@@ -168,18 +169,18 @@ async function handlePriceUpdate(data) {
             if (closestCP && cpDirection === "BUY" && closestCP > current) {
                 logger.warn('UPDATE CP BUY: Price >= Next CP');
                 await updateCheckpoint(closestCP, "BUY", false); // No re-entry
-            } else if (flooredPrice < current) {
+            } else if (buyPrice < current) {
                 logger.warn('EXIT BUY : ENTER SELL');
-                await updateCheckpoint(price, "SELL", true); // Reverse trade
+                await updateCheckpoint(roundTo3(price), "SELL", true); // Reverse trade
             }
 
         } else if (direction === "SELL") {
             if (closestCP && cpDirection === "SELL" && closestCP < current) {
                 logger.warn('UPDATE CP SELL: Price <= Prev CP');
                 await updateCheckpoint(closestCP, "SELL", false); // No re-entry
-            } else if (flooredPrice > current) {
+            } else if (price > current) {
                 logger.warn('EXIT SELL : ENTER BUY');
-                await updateCheckpoint(price, "BUY", true); // Reverse trade
+                await updateCheckpoint(roundTo3(price), "BUY", true); // Reverse trade
             }
         }
 
