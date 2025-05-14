@@ -14,8 +14,8 @@ function floorCheckpoint(price) {
     return Math.floor(price);
 }
 
-function generateCheckpointRange(cp) {
-    const base = Math.floor(cp / GAP) * GAP;
+function generateCheckpointRangeFromPrice(price) {
+    const base = Math.floor(price / GAP) * GAP;
     const prevs = Array.from({ length: RANGE }, (_, i) => base - GAP * (i + 1)).reverse();
     const nexts = Array.from({ length: RANGE }, (_, i) => base + GAP * (i + 1));
     return { prevs, nexts };
@@ -35,7 +35,7 @@ function findClosestLevels(price, prevs, nexts) {
     if (upperPrev) return { cp: upperPrev, direction: "SELL" };
 
     return { cp: null, direction: null };
-};
+}
 
 async function sendTrade(symbol, price, direction) {
     try {
@@ -109,18 +109,21 @@ async function handlePriceUpdate(data) {
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
 
-        const { prevs, nexts } = generateCheckpointRange(current);
+        const { prevs, nexts } = generateCheckpointRangeFromPrice(current);
+
         const updateCheckpoint = async (updatedCP, newDirection, shouldTrade = true) => {
             await redis.hset(redisKey, {
                 current: updatedCP,
                 direction: newDirection,
                 initialTraded: 1
             });
-            const { prevs, nexts } = generateCheckpointRange(updatedCP);
+
+            const tradePrice = newDirection === "BUY" ? buyPrice : price;
+            const { prevs, nexts } = generateCheckpointRangeFromPrice(tradePrice);
             const next = nexts[0];
             const prev = prevs[prevs.length - 1];
-            logger.info(`🔁 ${symbol}: ${price} | Checkpoint Updated | Current: ${updatedCP} | Prev: ${prev} | Next: ${next}`);
-            const tradePrice = newDirection === "BUY" ? buyPrice : price;
+
+            logger.info(`🔁 ${symbol}: ${tradePrice} | Checkpoint Updated | Current: ${updatedCP} | Prev: ${prev} | Next: ${next}`);
 
             if (shouldTrade) {
                 sendTrade(symbol, tradePrice, newDirection);
@@ -153,7 +156,10 @@ async function handlePriceUpdate(data) {
                     GAP: parseFloat(dynamicGAP) || 0,
                     ECLIPSE_BUFFER: 0
                 });
-                logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${Math.floor(initialCP / GAP) * GAP - GAP} | Next: ${Math.floor(initialCP / GAP) * GAP + GAP}`);
+                const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCP);
+                const next = nexts[0];
+                const prev = prevs[prevs.length - 1];
+                logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${prev} | Next: ${next}`);
                 sendTrade(symbol, tradePrice, initialDirection);
             }
 
