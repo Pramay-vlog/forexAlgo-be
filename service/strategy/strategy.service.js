@@ -142,7 +142,7 @@ async function handlePriceUpdate(data) {
 
         // Initial Trade
         if (!initialTraded) {
-            if (Math.abs(price - current) >= dynamicEclipseBuffer) {
+            if (Math.abs(price - current) >= ECLIPSE_BUFFER) {
                 const initialDirection = price > current ? "BUY" : "SELL";
                 const tradePrice = initialDirection === "BUY" ? buyPrice : price;
                 const initialCP = tradePrice;
