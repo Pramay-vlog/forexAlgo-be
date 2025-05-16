@@ -179,9 +179,23 @@ async function handlePriceUpdate(data) {
                 await updateCheckpoint(closestCP, "BUY", false); // No re-entry
             } else if (buyPrice < (current + tradeBuffer) || buyPrice < current) {
                 if (buyPrice < (current + tradeBuffer)) {
-                    logger.warn('🥇 ENTER SELL - BUFFER...');
+                    logger.warn({
+                        event: "ENTER SELL - BUFFER",
+                        buyPrice,
+                        current,
+                        tradeBuffer,
+                        condition: "buyPrice < (current + tradeBuffer)",
+                        result: buyPrice < (current + tradeBuffer)
+                    });
                 } else {
-                    logger.warn('🥈 ENTER SELL - NO BUFFER...');
+                    logger.warn({
+                        event: "ENTER SELL - NO BUFFER",
+                        buyPrice,
+                        current,
+                        tradeBuffer,
+                        condition: "buyPrice < current",
+                        result: buyPrice < current
+                    });
                 }
                 await updateCheckpoint(roundTo3(price), "SELL", true); // Reverse trade
             }
@@ -192,9 +206,23 @@ async function handlePriceUpdate(data) {
                 await updateCheckpoint(closestCP, "SELL", false); // No re-entry
             } else if (price > (current - tradeBuffer) || price > current) {
                 if (price > (current - tradeBuffer)) {
-                    logger.warn('🥇 ENTER BUY - BUFFER...');
+                    logger.warn({
+                        event: "ENTER BUY - BUFFER",
+                        buyPrice,
+                        current,
+                        tradeBuffer,
+                        condition: "price > (current - tradeBuffer)",
+                        result: price > (current - tradeBuffer)
+                    });
                 } else {
-                    logger.warn('🥈 ENTER BUY - NO BUFFER...');
+                    logger.warn({
+                        event: "ENTER BUY - NO BUFFER",
+                        buyPrice,
+                        current,
+                        tradeBuffer,
+                        condition: "price > (current - tradeBuffer)",
+                        result: price > (current - tradeBuffer)
+                    });
                 }
                 await updateCheckpoint(roundTo3(price), "BUY", true); // Reverse trade
             }
