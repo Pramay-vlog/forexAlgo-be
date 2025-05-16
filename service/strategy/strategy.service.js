@@ -1,15 +1,11 @@
 const { redis } = require("../../config/redis.config");
 const { logger } = require("../../helpers");
 
-const RANGE = 5;
+let RANGE = 5;
 const TRADE_HISTORY_QUEUE = "queue:trade_history";
 
 function roundTo3(num) {
     return parseFloat(num.toFixed(3));
-}
-
-function floorCheckpoint(price) {
-    return Math.floor(price);
 }
 
 function generateCheckpointRangeFromPrice(price, gap) {
@@ -75,7 +71,7 @@ async function sendTrade(symbol, price, direction) {
         sendMessageToDLL(message);
 
     } catch (err) {
-        logger.error("❌ sendTrade Error:", err);
+        logger.error("Error sending trade message:", err);
     }
 }
 
@@ -90,28 +86,22 @@ async function handlePriceUpdate(data) {
         const price = roundTo3(bid);
         const gap = dynamicGAP > 0 ? dynamicGAP : 2;
         const eclipseBuffer = dynamicBuffer > 0 ? dynamicBuffer : 0.3;
-
         const redisKey = `checkpoint:${symbol}`;
+
         let redisCheckpoint = await redis.hgetall(redisKey);
 
         if (!redisCheckpoint || Object.keys(redisCheckpoint).length === 0) {
             await redis.hset(redisKey, {
-                current: price,
+                current: roundTo3(price),
                 direction: "",
                 initialTraded: 0
             });
-            logger.info(`🟡 ${symbol}: Initialized checkpoint at ${price}`);
             return;
         }
 
         const current = parseFloat(redisCheckpoint.current);
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
-        const tradeBuffer = parseFloat(await redis.hget(`symbol_config:${symbol}`, "tradeBuffer")) || 0.10;
-
-        const { prevs, nexts } = generateCheckpointRangeFromPrice(current, gap);
-        const flooredPrice = floorCheckpoint(price);
-        const { cp: closestCP, direction: cpDirection } = findClosestLevels(flooredPrice, prevs, nexts);
 
         const updateCheckpoint = async (updatedCP, newDirection, shouldTrade = true) => {
             const roundedCP = roundTo3(updatedCP);
@@ -126,12 +116,11 @@ async function handlePriceUpdate(data) {
             const next = nexts[0];
             const prev = prevs.at(-1);
 
-            const message = `🔁 ${symbol}: ${tradePrice} | 📍 Checkpoint: ${roundedCP} | ⬅️ Prev: ${prev} | ➡️ Next: ${next}`;
+            const message = `🔁 ${symbol}: ${tradePrice} | 🍭 Checkpoint: ${roundedCP} | ⬅️ Prev: ${prev} | ➡️ Next: ${next}`;
             if (shouldTrade) {
-                logger.info(`${message} | ✅ Trade Triggered`);
+                logger.info(`✅ Trade Triggered | ${message}`);
                 await sendTrade(symbol, tradePrice, newDirection);
             } else {
-                logger.info(`${message} | ⏭️ Skipped (No Re-entry)`);
                 await redis.rpush(TRADE_HISTORY_QUEUE, JSON.stringify({
                     symbol,
                     price: tradePrice,
@@ -148,7 +137,7 @@ async function handlePriceUpdate(data) {
             if (Math.abs(price - current) >= eclipseBuffer) {
                 const initialDirection = price > current ? "BUY" : "SELL";
                 const tradePrice = initialDirection === "BUY" ? buyPrice : price;
-                const initialCP = roundTo3(tradePrice);
+                const initialCP = roundTo3(price);
                 await redis.hset(redisKey, {
                     current: initialCP,
                     direction: initialDirection,
@@ -159,36 +148,64 @@ async function handlePriceUpdate(data) {
                     GAP: gap,
                     ECLIPSE_BUFFER: 0
                 });
-
                 const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCP, gap);
-                logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | CP: ${initialCP} | ⬅️ ${prevs.at(-1)} | ➡️ ${nexts[0]}`);
+                logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
                 await sendTrade(symbol, tradePrice, initialDirection);
             }
+
             return;
         }
 
-        // 🔄 Reversal / Progression
+        const { prevs, nexts } = generateCheckpointRangeFromPrice(current, gap);
+        const { cp: closestCP, direction: cpDirection } = findClosestLevels(price, prevs, nexts);
+        const getTradeBuffer = await redis.hget(`symbol_config:${symbol}`, "tradeBuffer");
+        const tradeBuffer = parseFloat(getTradeBuffer) || 0.1;
+
         if (direction === "BUY") {
-            if (closestCP && cpDirection === "BUY" && closestCP > current) {
-                logger.warn(`🔃 ${symbol}: Advancing BUY checkpoint → ${closestCP}`);
+            const cond1 = price < (current + tradeBuffer) && buyPrice > current;
+            const cond2 = price < current;
+
+            if (closestCP && cpDirection === "BUY" && closestCP < current) {
+                logger.warn('UPDATE CP BUY: Price >= Next CP');
                 await updateCheckpoint(closestCP, "BUY", false);
-            } else if (buyPrice < (current + tradeBuffer)) {
-                logger.warn(`🔁 ${symbol}: Reversing to SELL | buyPrice ${buyPrice} < current + buffer (${current + tradeBuffer})`);
-                await updateCheckpoint(price, "SELL", true);
             }
+
+            if (cond1 || cond2) {
+                logger.warn({
+                    event: "ENTER SELL",
+                    cond1: `price < (current + tradeBuffer) && buyPrice > current: ${cond1}`,
+                    cond2: `price < current: ${cond2}`,
+                    buyPrice,
+                    current,
+                    tradeBuffer
+                });
+                await updateCheckpoint(roundTo3(price), "SELL", true); // Reverse trade
+            }
+
         } else if (direction === "SELL") {
-            if (closestCP && cpDirection === "SELL" && closestCP < current) {
-                logger.warn(`🔃 ${symbol}: Advancing SELL checkpoint → ${closestCP}`);
+            const cond1 = buyPrice > (current - tradeBuffer) && buyPrice < current;
+            const cond2 = buyPrice > current;
+
+            if (closestCP && cpDirection === "SELL" && closestCP > current) {
+                logger.warn('UPDATE CP SELL: Price <= Next CP');
                 await updateCheckpoint(closestCP, "SELL", false);
-            } else if (price > (current - tradeBuffer)) {
-                logger.warn(`🔁 ${symbol}: Reversing to BUY | price ${price} > current - buffer (${current - tradeBuffer})`);
-                await updateCheckpoint(price, "BUY", true);
+            }
+
+            if (cond1 || cond2) {
+                logger.warn({
+                    event: "ENTER BUY",
+                    cond1: `buyPrice > (current - tradeBuffer) && buyPrice < current: ${cond1}`,
+                    cond2: `buyPrice > current: ${cond2}`,
+                    buyPrice,
+                    current,
+                    tradeBuffer
+                });
+                await updateCheckpoint(roundTo3(price), "BUY", true); // Reverse trade
             }
         }
 
     } catch (err) {
-        logger.error("❌ handlePriceUpdate Error:", err);
-        logger.error("🧾 Offending Data:", data);
+        logger.error("handlePriceUpdate error:", data, "\n", err);
     }
 }
 
