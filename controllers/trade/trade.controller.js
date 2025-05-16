@@ -7,7 +7,7 @@ const ACTIVE_SYMBOLS_KEY = "active:symbols";
 
 module.exports = {
     Trade: async (req, res) => {
-        const { symbol, GAP, ECLIPSE_BUFFER, volume } = req.body;
+        const { symbol, GAP, ECLIPSE_BUFFER, volume, tradeBuffer } = req.body;
         let isActive = await redis.sismember(ACTIVE_SYMBOLS_KEY, symbol);
         if (!isActive) {
             isActive = await DB.TRADE.findOne({ symbol, isActive: true }).lean();
@@ -23,6 +23,7 @@ module.exports = {
                 GAP,
                 ECLIPSE_BUFFER,
                 volume,
+                tradeBuffer,
             });
 
             // Send subscription message to DLL
@@ -39,6 +40,7 @@ module.exports = {
                 gap: GAP,
                 eclipseBuffer: ECLIPSE_BUFFER,
                 volume,
+                tradeBuffer,
             })
 
             return response.OK({ res, message: "Symbol subscribed successfully" });

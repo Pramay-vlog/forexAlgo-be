@@ -11,6 +11,7 @@ module.exports = {
             GAP: Joi.number().required(),
             ECLIPSE_BUFFER: Joi.number().required(),
             volume: Joi.number().required(),
+            tradeBuffer: Joi.number().required(),
         }),
     }),
 
