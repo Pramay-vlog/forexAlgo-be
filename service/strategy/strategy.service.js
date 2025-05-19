@@ -200,7 +200,7 @@ async function handlePriceUpdate(data) {
                     current,
                     tradeBuffer
                 });
-                await updateCheckpoint(roundTo3(price), "BUY", true); // Reverse trade
+                await updateCheckpoint(roundTo3(buyPrice), "BUY", true); // Reverse trade
             }
         }
 
