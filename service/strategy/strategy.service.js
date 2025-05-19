@@ -184,8 +184,7 @@ async function handlePriceUpdate(data) {
                 await updateCheckpoint(closestCP, "BUY", false);
             }
 
-            // if (cond1 || cond2) {
-            if (cond2) {
+            if (cond1 || cond2) {
                 logger.warn({
                     event: "ENTER SELL",
                     cond1: `turning from above: ${isTurningFromAbove} && buyPrice > current: ${buyPrice > current}`,
@@ -211,8 +210,7 @@ async function handlePriceUpdate(data) {
                 await updateCheckpoint(closestCP, "SELL", false);
             }
 
-            // if (cond1 || cond2) {
-            if (cond2) {
+            if (cond1 || cond2) {
                 logger.warn({
                     event: "ENTER BUY",
                     cond1: `turning from below: ${isTurningFromBelow} && buyPrice < current: ${buyPrice < current}`,
