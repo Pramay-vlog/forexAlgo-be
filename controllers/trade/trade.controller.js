@@ -55,6 +55,10 @@ module.exports = {
             // Remove checkpoints hash
             await redis.del(`checkpoint:${symbol}`);
 
+            // Remove trade history list
+            const { clearSymbolState } = require('../../service/strategy/strategy.service')
+            clearSymbolState(symbol);
+
             // Send unsubscription message to DLL
             sendMessageToDLL({
                 action: "UNSUBSCRIBE",
