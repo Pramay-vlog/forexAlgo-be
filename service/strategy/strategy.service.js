@@ -164,67 +164,87 @@ async function handlePriceUpdate(data) {
             return;
         }
 
-        const { prevs, nexts } = generateCheckpointRangeFromPrice(current, gap);
-        const { cp: closestCP, direction: cpDirection } = findClosestLevels(price, prevs, nexts);
-        const getTradeBuffer = await redis.hget(`symbol_config:${symbol}`, "tradeBuffer");
-        const tradeBuffer = parseFloat(getTradeBuffer) || 0.1;
+        // 🧠 New strategy logic (single checkpoint only, no updates after)
+        if (initialTraded) {
+            const currentCheckpoint = parseFloat(redisCheckpoint.current);
+            const lastDirection = redisCheckpoint.direction;
 
-        const upperBound = current + tradeBuffer;
-        const lowerBound = current - tradeBuffer;
-
-        if (direction === "BUY") {
-            const isTurningFromAbove =
-                prevPrice > upperBound && price <= upperBound;
-
-            const cond1 = isTurningFromAbove && buyPrice > current;
-            const cond2 = price < current;
-
-            if (closestCP && cpDirection === "BUY" && closestCP < current) {
-                logger.warn('UPDATE CP BUY: Price >= Next CP');
-                await updateCheckpoint(closestCP, "BUY", false);
+            // BUY: price crosses ABOVE checkpoint, and not already in BUY
+            if (price > currentCheckpoint && lastDirection !== "BUY") {
+                logger.info(`📈 ${symbol} - Price "${price}" > Checkpoint "${currentCheckpoint}" | Entering BUY`);
+                await redis.hset(redisKey, { direction: "BUY" });
+                await sendTrade(symbol, buyPrice, "BUY");
             }
 
-            // if (cond1 || cond2) {
-            if (cond2) {
-                logger.warn({
-                    event: "ENTER SELL",
-                    cond1: `turning from above: ${isTurningFromAbove} && buyPrice > current: ${buyPrice > current}`,
-                    cond2: `price < current: ${cond2}`,
-                    prevPrice,
-                    price,
-                    buyPrice,
-                    current,
-                    tradeBuffer
-                });
-                await updateCheckpoint(roundTo3(price), "SELL", true);
-            }
-
-        } else if (direction === "SELL") {
-            const isTurningFromBelow =
-                prevBuyPrice < lowerBound && buyPrice >= lowerBound;
-
-            const cond1 = isTurningFromBelow && buyPrice < current;
-            const cond2 = buyPrice > current;
-
-            if (closestCP && cpDirection === "SELL" && closestCP > current) {
-                logger.warn('UPDATE CP SELL: Price <= Next CP');
-                await updateCheckpoint(closestCP, "SELL", false);
-            }
-
-            // if (cond1 || cond2) {
-            if (cond2) {
-                logger.warn({
-                    event: "ENTER BUY",
-                    cond1: `turning from below: ${isTurningFromBelow} && buyPrice < current: ${buyPrice < current}`,
-                    cond2: `buyPrice > current: ${cond2}`,
-                    prevBuyPrice,
-                    buyPrice,
-                    current,
-                    tradeBuffer
-                });
-                await updateCheckpoint(roundTo3(buyPrice), "BUY", true);
+            // SELL: price drops BELOW checkpoint, and not already in SELL
+            else if (price < currentCheckpoint && lastDirection !== "SELL") {
+                logger.info(`📉 ${symbol} - Price "${price}" < Checkpoint "${currentCheckpoint}" | Entering SELL`);
+                await redis.hset(redisKey, { direction: "SELL" });
+                await sendTrade(symbol, price, "SELL");
             }
         }
+
+        // const { prevs, nexts } = generateCheckpointRangeFromPrice(current, gap);
+        // const { cp: closestCP, direction: cpDirection } = findClosestLevels(price, prevs, nexts);
+        // const getTradeBuffer = await redis.hget(`symbol_config:${symbol}`, "tradeBuffer");
+        // const tradeBuffer = parseFloat(getTradeBuffer) || 0.1;
+
+        // const upperBound = current + tradeBuffer;
+        // const lowerBound = current - tradeBuffer;
+
+        // if (direction === "BUY") {
+        //     const isTurningFromAbove =
+        //         prevPrice > upperBound && price <= upperBound;
+
+        //     const cond1 = isTurningFromAbove && buyPrice > current;
+        //     const cond2 = price < current;
+
+        //     if (closestCP && cpDirection === "BUY" && closestCP < current) {
+        //         logger.warn('UPDATE CP BUY: Price >= Next CP');
+        //         await updateCheckpoint(closestCP, "BUY", false);
+        //     }
+
+        //     // if (cond1 || cond2) {
+        //     if (cond2) {
+        //         logger.warn({
+        //             event: "ENTER SELL",
+        //             cond1: `turning from above: ${isTurningFromAbove} && buyPrice > current: ${buyPrice > current}`,
+        //             cond2: `price < current: ${cond2}`,
+        //             prevPrice,
+        //             price,
+        //             buyPrice,
+        //             current,
+        //             tradeBuffer
+        //         });
+        //         await updateCheckpoint(roundTo3(price), "SELL", true);
+        //     }
+
+        // } else if (direction === "SELL") {
+        //     const isTurningFromBelow =
+        //         prevBuyPrice < lowerBound && buyPrice >= lowerBound;
+
+        //     const cond1 = isTurningFromBelow && buyPrice < current;
+        //     const cond2 = buyPrice > current;
+
+        //     if (closestCP && cpDirection === "SELL" && closestCP > current) {
+        //         logger.warn('UPDATE CP SELL: Price <= Next CP');
+        //         await updateCheckpoint(closestCP, "SELL", false);
+        //     }
+
+        //     // if (cond1 || cond2) {
+        //     if (cond2) {
+        //         logger.warn({
+        //             event: "ENTER BUY",
+        //             cond1: `turning from below: ${isTurningFromBelow} && buyPrice < current: ${buyPrice < current}`,
+        //             cond2: `buyPrice > current: ${cond2}`,
+        //             prevBuyPrice,
+        //             buyPrice,
+        //             current,
+        //             tradeBuffer
+        //         });
+        //         await updateCheckpoint(roundTo3(buyPrice), "BUY", true);
+        //     }
+        // }
 
     } catch (err) {
         logger.error("handlePriceUpdate error:", data, "\n", err);
