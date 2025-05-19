@@ -181,7 +181,8 @@ async function handlePriceUpdate(data) {
                 await updateCheckpoint(closestCP, "BUY", false);
             }
 
-            if (cond1 || cond2) {
+            // if (cond1 || cond2) {
+            if (cond2) {
                 const roundedNewCP = roundTo3(price);
                 if (lastDir === "SELL" && parseFloat(lastCP) === roundedNewCP) {
                     logger.warn(`🚫 Skipping redundant SELL at ${roundedNewCP}`);
@@ -209,7 +210,8 @@ async function handlePriceUpdate(data) {
                 await updateCheckpoint(closestCP, "SELL", false);
             }
 
-            if (cond1 || cond2) {
+            // if (cond1 || cond2) {
+            if (cond2) {
                 const roundedNewCP = roundTo3(buyPrice);
                 if (lastDir === "BUY" && parseFloat(lastCP) === roundedNewCP) {
                     logger.warn(`🚫 Skipping redundant BUY at ${roundedNewCP}`);
