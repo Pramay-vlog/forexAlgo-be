@@ -42,7 +42,7 @@ async function sendTrade(symbol, price, direction) {
         const ECLIPSE_BUFFER = parseFloat(symbolConfig.ECLIPSE_BUFFER) || 0;
         const volume = parseFloat(symbolConfig.volume) || 0.1;
 
-        const nonce = Math.floor(Math.random() * 1000000).toString(36).substring(2, 10);
+        const nonce = Math.floor(Math.random() * 1e6).toString(36).substring(2, 10);
 
         const message = {
             type: "trade",
@@ -101,7 +101,8 @@ async function handlePriceUpdate(data) {
         let redisCheckpoint = await redis.hgetall(redisKey);
         if (!redisCheckpoint || Object.keys(redisCheckpoint).length === 0) {
             await redis.hset(redisKey, {
-                current: roundTo3(price),
+                // current: roundTo3(price),
+                current: price,
                 direction: "",
                 initialTraded: 0
             });
@@ -164,24 +165,22 @@ async function handlePriceUpdate(data) {
             return;
         }
 
-        // 🧠 New strategy logic (single checkpoint only, no updates after)
-        if (initialTraded) {
-            const currentCheckpoint = parseFloat(redisCheckpoint.current);
-            const lastDirection = redisCheckpoint.direction;
+        // 🚦 Strategy Logic: Single checkpoint crossing
+        const lastCheckpoint = parseFloat(redisCheckpoint.current);
+        const lastDirection = redisCheckpoint.direction;
 
-            // BUY: price crosses ABOVE checkpoint, and not already in BUY
-            if (price > currentCheckpoint && lastDirection !== "BUY") {
-                logger.info(`📈 ${symbol} - Price "${price}" > Checkpoint "${currentCheckpoint}" | Entering BUY`);
-                await redis.hset(redisKey, { direction: "BUY" });
-                await sendTrade(symbol, buyPrice, "BUY");
-            }
+        // BUY logic: crossing upward
+        if (price > lastCheckpoint && lastDirection !== "BUY") {
+            logger.info(`📈 ${symbol} | Price: ${price} > CP: ${lastCheckpoint} | → BUY`);
+            await redis.hset(redisKey, { direction: "BUY" });
+            await sendTrade(symbol, buyPrice, "BUY");
+        }
 
-            // SELL: price drops BELOW checkpoint, and not already in SELL
-            else if (price < currentCheckpoint && lastDirection !== "SELL") {
-                logger.info(`📉 ${symbol} - Price "${price}" < Checkpoint "${currentCheckpoint}" | Entering SELL`);
-                await redis.hset(redisKey, { direction: "SELL" });
-                await sendTrade(symbol, price, "SELL");
-            }
+        // SELL logic: crossing downward
+        else if (price < lastCheckpoint && lastDirection !== "SELL") {
+            logger.info(`📉 ${symbol} | Price: ${price} < CP: ${lastCheckpoint} | → SELL`);
+            await redis.hset(redisKey, { direction: "SELL" });
+            await sendTrade(symbol, price, "SELL");
         }
 
         // const { prevs, nexts } = generateCheckpointRangeFromPrice(current, gap);
