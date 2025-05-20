@@ -172,24 +172,14 @@ async function handlePriceUpdate(data) {
         // BUY logic: crossing upward
         if (price > lastCheckpoint && lastDirection !== "BUY") {
             logger.info(`📈 ${symbol} | Price: ${price} > CP: ${lastCheckpoint} | → BUY`);
-            const newCheckpoint = roundTo3(buyPrice);
-            await redis.hset(redisKey, {
-                current: newCheckpoint,
-                direction: "BUY",
-                initialTraded: 1
-            });
+            await redis.hset(redisKey, { direction: "BUY" });
             await sendTrade(symbol, buyPrice, "BUY");
         }
 
         // SELL logic: crossing downward
         else if (price < lastCheckpoint && lastDirection !== "SELL") {
             logger.info(`📉 ${symbol} | Price: ${price} < CP: ${lastCheckpoint} | → SELL`);
-            const newCheckpoint = roundTo3(price);
-            await redis.hset(redisKey, {
-                current: newCheckpoint,
-                direction: "SELL",
-                initialTraded: 1
-            });
+            await redis.hset(redisKey, { direction: "SELL" });
             await sendTrade(symbol, price, "SELL");
         }
 
