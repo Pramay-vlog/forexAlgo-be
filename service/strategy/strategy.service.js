@@ -146,61 +146,73 @@ async function handlePriceUpdate(data) {
         }
 
         if (strategy === STRATEGY.TRAILING) {
-            const dedupKey = `dedup:${symbol}`;
-            const lastValue = await redis.get(dedupKey);
 
             const updateCheckpoint = async (updatedCP, newDirection, shouldTrade = true) => {
                 const roundedCP = roundTo3(updatedCP);
-
-                // Update Redis checkpoint regardless
                 await redis.hset(redisKey, {
                     current: roundedCP,
                     direction: newDirection,
                     initialTraded: 1
                 });
 
-                if (!shouldTrade) return;
-
-                // Only send trade if not duplicate
-                const newDedupValue = `${roundedCP}|${newDirection}`;
-                if (lastValue === newDedupValue) {
-                    logger.warn(`⛔ Duplicate trade skipped for ${symbol} | CP: ${roundedCP} | Dir: ${newDirection}`);
-                    return;
-                }
-
                 const tradePrice = newDirection === "BUY" ? buyPrice : price;
-                logger.info(`✅ Trade Triggered | ${symbol} @ ${tradePrice} → ${newDirection} | CP: ${roundedCP}`);
-                await sendTrade(symbol, tradePrice, newDirection, strategy);
-                await redis.set(dedupKey, newDedupValue); // Save dedup state
+                const { prevs, nexts } = generateCheckpointRangeFromPrice(tradePrice, gap);
+                const next = nexts[0];
+                const prev = prevs.at(-1);
+
+                const message = `🔁 ${symbol}: ${tradePrice} | 🍭 Checkpoint: ${roundedCP} | ⬅️ Prev: ${prev} | ➡️ Next: ${next}`;
+                if (shouldTrade) {
+                    logger.info(`✅ Trade Triggered | ${message}`);
+                    await sendTrade(symbol, tradePrice, newDirection, strategy);
+                } else {
+                    await redis.rpush(TRADE_HISTORY_QUEUE, JSON.stringify({
+                        symbol,
+                        price: tradePrice,
+                        action: "SKIP",
+                        direction: newDirection,
+                        checkpoint: roundedCP,
+                        createdAt: new Date()
+                    }));
+                }
             };
 
             const { prevs, nexts } = generateCheckpointRangeFromPrice(current, gap);
             const { cp: closestCP, direction: cpDirection } = findClosestLevels(price, prevs, nexts);
 
             if (direction === "BUY") {
-                // If price dropped, reverse to SELL
-                if (price < current) {
-                    logger.info(`↩️ Reverse detected: BUY → SELL | Price: ${price} < CP: ${current}`);
-                    await updateCheckpoint(price, "SELL", true);  // ⬅️ This is a new SELL entry
+                const cond = price < current;
+
+                if (closestCP && cpDirection === "BUY" && closestCP < current) {
+                    logger.warn('UPDATE CP BUY: Price >= Next CP');
+                    await updateCheckpoint(closestCP, "BUY", false);
                 }
 
-                // Shift checkpoint upwards if price moved up but didn't reverse
-                else if (closestCP && cpDirection === "BUY" && closestCP > current) {
-                    logger.info(`🔄 Shift CP up (BUY): ${current} → ${closestCP}`);
-                    await updateCheckpoint(closestCP, "BUY", false);  // No trade, only update CP
+                if (cond) {
+                    logger.warn({
+                        event: "ENTER SELL",
+                        cond: `price < current: ${cond}`,
+                        price,
+                        current,
+                    });
+                    await updateCheckpoint(price, "SELL", true);
                 }
 
             } else if (direction === "SELL") {
-                // If price rose, reverse to BUY
-                if (buyPrice > current) {
-                    logger.info(`↩️ Reverse detected: SELL → BUY | Price: ${buyPrice} > CP: ${current}`);
-                    await updateCheckpoint(buyPrice, "BUY", true);  // ⬅️ This is a new BUY entry
+                const cond = buyPrice > current;
+
+                if (closestCP && cpDirection === "SELL" && closestCP > current) {
+                    logger.warn('UPDATE CP SELL: Price <= Next CP');
+                    await updateCheckpoint(closestCP, "SELL", false);
                 }
 
-                // Shift checkpoint downwards if price dropped but didn't reverse
-                else if (closestCP && cpDirection === "SELL" && closestCP < current) {
-                    logger.info(`🔄 Shift CP down (SELL): ${current} → ${closestCP}`);
-                    await updateCheckpoint(closestCP, "SELL", false);  // No trade, only update CP
+                if (cond) {
+                    logger.warn({
+                        event: "ENTER BUY",
+                        cond: `buyPrice > current: ${cond}`,
+                        buyPrice,
+                        current,
+                    });
+                    await updateCheckpoint(buyPrice, "BUY", true);
                 }
             }
         }
