@@ -147,10 +147,7 @@ async function handlePriceUpdate(data) {
 
         if (strategy === STRATEGY.TRAILING) {
             const dedupKey = `dedup:${symbol}`;
-            const currentCP = roundTo3(current);
-            const dedupValue = `${currentCP}|${direction}`;
             const lastValue = await redis.get(dedupKey);
-            if (lastValue === dedupValue) return; // Skip duplicate trade
 
             const updateCheckpoint = async (updatedCP, newDirection, shouldTrade = true) => {
                 const roundedCP = roundTo3(updatedCP);
