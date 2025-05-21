@@ -83,7 +83,6 @@ async function handlePriceUpdate(data) {
 
         if (!symbol || typeof bid !== "number") return;
         if (!Object.values(STRATEGY).includes(strategy)) return;
-        console.log('🚀 ~ handlePriceUpdate ~ strategy:', strategy);
 
         const buyPrice = roundTo3(ask);
         const price = roundTo3(bid);
@@ -128,6 +127,8 @@ async function handlePriceUpdate(data) {
             return;
         }
 
+        console.log('🚀 ~ handlePriceUpdate ~ strategy === STRATEGY.STATIC:', strategy === STRATEGY.STATIC);
+        console.log('🚀 ~ handlePriceUpdate ~ strategy === STRATEGY.TRAILING:', strategy === STRATEGY.TRAILING);
         if (strategy === STRATEGY.STATIC) {
             // 🚦 Strategy Logic: Single checkpoint crossing
             const lastCheckpoint = parseFloat(redisCheckpoint.current);
