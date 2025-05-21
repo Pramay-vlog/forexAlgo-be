@@ -220,7 +220,7 @@ async function handlePriceUpdate(data) {
         }
 
     } catch (err) {
-        logger.error("handlePriceUpdate error:", data, "\n", err);
+        logger.error("handlePriceUpdate error:", err);
     }
 }
 
