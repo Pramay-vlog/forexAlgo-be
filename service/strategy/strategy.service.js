@@ -79,7 +79,7 @@ async function sendTrade(symbol, price, direction) {
 async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
-        const { symbol, bid, ask, GAP: dynamicGAP, ECLIPSE_BUFFER: dynamicBuffer, strategy } = parsed;
+        const { symbol, bid, ask, GAP: dynamicGAP, strategy } = parsed;
 
         if (!symbol || typeof bid !== "number") return;
         if (!Object.values(STRATEGY).includes(strategy)) return;
@@ -87,43 +87,29 @@ async function handlePriceUpdate(data) {
         const buyPrice = roundTo3(ask);
         const price = roundTo3(bid);
         const gap = dynamicGAP > 0 ? dynamicGAP : 2;
-        const eclipseBuffer = dynamicBuffer > 0 ? dynamicBuffer : 0.3;
         const redisKey = `checkpoint:${symbol}`;
 
         let redisCheckpoint = await redis.hgetall(redisKey);
-        if (!redisCheckpoint || Object.keys(redisCheckpoint).length === 0) {
-            await redis.hset(redisKey, {
-                current: price,
-                direction: "",
-                initialTraded: 0
-            });
-            return;
-        }
-
-        const current = parseFloat(redisCheckpoint.current);
-        const direction = redisCheckpoint.direction;
-        const initialTraded = redisCheckpoint.initialTraded === "1";
+        console.log('🚀 ~ handlePriceUpdate ~ redisCheckpoint:', redisCheckpoint);
 
         // 🥇 Initial trade logic
-        if (!initialTraded) {
-            if (Math.abs(price - current) >= eclipseBuffer) {
-                const initialDirection = price > current ? "BUY" : "SELL";
-                const tradePrice = initialDirection === "BUY" ? buyPrice : price;
-                const initialCP = roundTo3(price);
-                await redis.hset(redisKey, {
-                    current: initialCP,
-                    direction: initialDirection,
-                    initialTraded: 1
-                });
-                await redis.hset(`symbol_config:${symbol}`, {
-                    symbol,
-                    GAP: gap,
-                    ECLIPSE_BUFFER: 0
-                });
-                const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCP, gap);
-                logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
-                await sendTrade(symbol, tradePrice, initialDirection);
-            }
+        if (!redisCheckpoint) {
+            const initialDirection = price > current ? "BUY" : "SELL";
+            const tradePrice = initialDirection === "BUY" ? buyPrice : price;
+            const initialCP = roundTo3(price);
+            await redis.hset(redisKey, {
+                current: initialCP,
+                direction: initialDirection,
+                initialTraded: 1
+            });
+            await redis.hset(`symbol_config:${symbol}`, {
+                symbol,
+                GAP: gap,
+                ECLIPSE_BUFFER: 0
+            });
+            const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCP, gap);
+            logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
+            await sendTrade(symbol, tradePrice, initialDirection);
             return;
         }
 
