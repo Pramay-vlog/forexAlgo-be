@@ -93,7 +93,7 @@ async function handlePriceUpdate(data) {
         console.log('🚀 ~ handlePriceUpdate ~ redisCheckpoint:', redisCheckpoint);
 
         // 🥇 Initial trade logic
-        if (!redisCheckpoint) {
+        if (!redisCheckpoint?.initialTraded) {
             const initialDirection = price > current ? "BUY" : "SELL";
             const tradePrice = initialDirection === "BUY" ? buyPrice : price;
             const initialCP = roundTo3(price);
