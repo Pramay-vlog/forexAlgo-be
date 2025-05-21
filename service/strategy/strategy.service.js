@@ -82,7 +82,7 @@ async function handlePriceUpdate(data) {
         const { symbol, bid, ask, GAP: dynamicGAP, ECLIPSE_BUFFER: dynamicBuffer, strategy } = parsed;
 
         if (!symbol || typeof bid !== "number") return;
-        if (!STRATEGY.includes(strategy)) return;
+        if (!Object.values(STRATEGY).includes(strategy)) return;
 
         const buyPrice = roundTo3(ask);
         const price = roundTo3(bid);
