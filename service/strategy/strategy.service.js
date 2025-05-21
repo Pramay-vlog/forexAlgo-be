@@ -90,6 +90,7 @@ async function handlePriceUpdate(data) {
         const redisKey = `checkpoint:${symbol}`;
 
         let redisCheckpoint = await redis.hgetall(redisKey);
+        console.log('🚀 ~ handlePriceUpdate ~ redisCheckpoint:', redisCheckpoint);
         if (!redisCheckpoint || Object.keys(redisCheckpoint).length === 0) {
             await redis.hset(redisKey, {
                 current: price || buyPrice,
