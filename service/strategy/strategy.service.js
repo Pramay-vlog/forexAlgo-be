@@ -79,6 +79,7 @@ async function sendTrade(symbol, price, direction) {
 async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
+        console.log('🚀 ~ handlePriceUpdate ~ parsed:', parsed);
         const { symbol, bid, ask, GAP: dynamicGAP, strategy } = parsed;
 
         if (!symbol || typeof bid !== "number") return;
@@ -90,7 +91,6 @@ async function handlePriceUpdate(data) {
         const redisKey = `checkpoint:${symbol}`;
 
         let redisCheckpoint = await redis.hgetall(redisKey);
-        console.log('🚀 ~ handlePriceUpdate ~ redisCheckpoint:', redisCheckpoint);
         if (!redisCheckpoint || Object.keys(redisCheckpoint).length === 0) {
             await redis.hset(redisKey, {
                 current: price || buyPrice,
@@ -103,7 +103,6 @@ async function handlePriceUpdate(data) {
         const current = parseFloat(redisCheckpoint.current);
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
-        console.log('🚀 ~ handlePriceUpdate ~ initialTraded:', initialTraded);
 
         // 🥇 Initial trade logic
         if (!initialTraded) {
