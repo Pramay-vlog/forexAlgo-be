@@ -80,6 +80,7 @@ async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
         const { symbol, bid, ask, GAP: dynamicGAP, ECLIPSE_BUFFER: dynamicBuffer, strategy } = parsed;
+        console.log('🚀 ~ handlePriceUpdate ~ strategy:', strategy);
 
         if (!symbol || typeof bid !== "number") return;
         if (!Object.values(STRATEGY).includes(strategy)) return;
