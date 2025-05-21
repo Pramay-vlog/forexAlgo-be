@@ -32,7 +32,7 @@ function findClosestLevels(price, prevs, nexts) {
     return { cp: null, direction: null };
 }
 
-async function sendTrade(symbol, price, direction) {
+async function sendTrade(symbol, price, direction, strategy) {
     try {
         const [symbolConfig, checkpoint] = await Promise.all([
             redis.hgetall(`symbol_config:${symbol}`),
@@ -56,7 +56,8 @@ async function sendTrade(symbol, price, direction) {
             initialTraded: checkpoint.initialTraded === "1",
             direction: checkpoint.direction || "",
             nonce,
-            volume
+            volume,
+            strategy,
         };
 
         await redis.rpush(TRADE_HISTORY_QUEUE, JSON.stringify({
@@ -121,7 +122,7 @@ async function handlePriceUpdate(data) {
             });
             const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCP, gap);
             logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
-            await sendTrade(symbol, tradePrice, initialDirection);
+            await sendTrade(symbol, tradePrice, initialDirection, strategy);
             return;
         }
 
@@ -134,14 +135,14 @@ async function handlePriceUpdate(data) {
             if (price > lastCheckpoint && lastDirection !== "BUY") {
                 logger.info(`📈 ${symbol} | Price: ${price} > CP: ${lastCheckpoint} | → BUY`);
                 await redis.hset(redisKey, { direction: "BUY" });
-                await sendTrade(symbol, buyPrice, "BUY");
+                await sendTrade(symbol, buyPrice, "BUY", strategy);
             }
 
             // SELL logic: crossing downward
             else if (price < lastCheckpoint && lastDirection !== "SELL") {
                 logger.info(`📉 ${symbol} | Price: ${price} < CP: ${lastCheckpoint} | → SELL`);
                 await redis.hset(redisKey, { direction: "SELL" });
-                await sendTrade(symbol, price, "SELL");
+                await sendTrade(symbol, price, "SELL", strategy);
             }
         }
 
@@ -163,7 +164,7 @@ async function handlePriceUpdate(data) {
                 const message = `🔁 ${symbol}: ${tradePrice} | 🍭 Checkpoint: ${roundedCP} | ⬅️ Prev: ${prev} | ➡️ Next: ${next}`;
                 if (shouldTrade) {
                     logger.info(`✅ Trade Triggered | ${message}`);
-                    await sendTrade(symbol, tradePrice, newDirection);
+                    await sendTrade(symbol, tradePrice, newDirection, strategy);
                 } else {
                     await redis.rpush(TRADE_HISTORY_QUEUE, JSON.stringify({
                         symbol,
