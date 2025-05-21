@@ -79,7 +79,6 @@ async function sendTrade(symbol, price, direction) {
 async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
-        console.log('🚀 ~ handlePriceUpdate ~ parsed:', parsed);
         const { symbol, bid, ask, GAP: dynamicGAP, strategy } = parsed;
 
         if (!symbol || typeof bid !== "number") return;
@@ -125,8 +124,6 @@ async function handlePriceUpdate(data) {
             return;
         }
 
-        console.log('🚀 ~ handlePriceUpdate ~ strategy === STRATEGY.STATIC:', strategy === STRATEGY.STATIC);
-        console.log('🚀 ~ handlePriceUpdate ~ strategy === STRATEGY.TRAILING:', strategy === STRATEGY.TRAILING);
         if (strategy === STRATEGY.STATIC) {
             // 🚦 Strategy Logic: Single checkpoint crossing
             const lastCheckpoint = parseFloat(redisCheckpoint.current);
