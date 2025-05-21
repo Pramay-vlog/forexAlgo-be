@@ -20,6 +20,10 @@ module.exports = {
             USER: 'user',
             ADMIN: 'admin',
         },
+        STRATEGY: {
+            TRAILING: 'TRAILING',
+            STATIC: 'STATIC',
+        }
     },
     MESSAGE: {
         TOKEN_REQUIRED: 'Token required.',

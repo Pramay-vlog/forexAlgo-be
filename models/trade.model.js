@@ -6,7 +6,7 @@ let tradeSchema = new Schema(
         gap: Number,
         eclipseBuffer: Number,
         volume: Number,
-        tradeBuffer: Number,
+        strategy: String,
         isActive: {
             type: Boolean,
             default: true,

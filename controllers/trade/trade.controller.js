@@ -7,7 +7,7 @@ const ACTIVE_SYMBOLS_KEY = "active:symbols";
 
 module.exports = {
     Trade: async (req, res) => {
-        const { symbol, GAP, ECLIPSE_BUFFER, volume, tradeBuffer } = req.body;
+        const { symbol, GAP, ECLIPSE_BUFFER, volume, strategy } = req.body;
         let isActive = await redis.sismember(ACTIVE_SYMBOLS_KEY, symbol);
         if (!isActive) {
             isActive = await DB.TRADE.findOne({ symbol, isActive: true }).lean();
@@ -23,7 +23,7 @@ module.exports = {
                 GAP,
                 ECLIPSE_BUFFER,
                 volume,
-                tradeBuffer,
+                strategy,
             });
 
             // Send subscription message to DLL
@@ -32,7 +32,8 @@ module.exports = {
                 symbol,
                 GAP,
                 ECLIPSE_BUFFER,
-                volume
+                volume,
+                strategy,
             });
 
             await DB.TRADE.create({
@@ -40,7 +41,7 @@ module.exports = {
                 gap: GAP,
                 eclipseBuffer: ECLIPSE_BUFFER,
                 volume,
-                tradeBuffer,
+                strategy,
             })
 
             return response.OK({ res, message: "Symbol subscribed successfully" });
@@ -54,10 +55,6 @@ module.exports = {
 
             // Remove checkpoints hash
             await redis.del(`checkpoint:${symbol}`);
-
-            // Remove trade history list
-            const { clearSymbolState } = require('../../service/strategy/strategy.service')
-            clearSymbolState(symbol);
 
             // Send unsubscription message to DLL
             sendMessageToDLL({

@@ -1,5 +1,5 @@
 const Joi = require("joi");
-const { constants: { ENUM: { ROLE } } } = require("../../helpers");
+const { constants: { ENUM: { STRATEGY } } } = require("../../helpers");
 const validator = require("../../middleware/validator");
 
 
@@ -11,7 +11,7 @@ module.exports = {
             GAP: Joi.number().required(),
             ECLIPSE_BUFFER: Joi.number().required(),
             volume: Joi.number().required(),
-            tradeBuffer: Joi.number().required(),
+            strategy: Joi.string().valid(...Object.values(STRATEGY)).required(),
         }),
     }),
 
