@@ -194,7 +194,7 @@ async function handlePriceUpdate(data) {
                         price,
                         current,
                     });
-                    await updateCheckpoint(roundTo3(price), "SELL", true);
+                    await updateCheckpoint(price, "SELL", true);
                 }
 
             } else if (direction === "SELL") {
@@ -212,7 +212,7 @@ async function handlePriceUpdate(data) {
                         buyPrice,
                         current,
                     });
-                    await updateCheckpoint(roundTo3(buyPrice), "BUY", true);
+                    await updateCheckpoint(buyPrice, "BUY", true);
                 }
             }
         }
