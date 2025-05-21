@@ -23,6 +23,7 @@ module.exports = {
         STRATEGY: {
             TRAILING: 'TRAILING',
             STATIC: 'STATIC',
+            REVERSAL: 'REVERSAL',
         }
     },
     MESSAGE: {

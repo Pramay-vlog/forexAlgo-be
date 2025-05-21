@@ -1,6 +1,6 @@
 const { redis } = require("../../config/redis.config");
 const { logger } = require("../../helpers");
-const { constants: { ENUM: { STRATEGY } } } = require('../../helpers')
+const { constants: { ENUM: { STRATEGY } } } = require('../../helpers');
 
 let RANGE = 5;
 const TRADE_HISTORY_QUEUE = "queue:trade_history";
@@ -91,54 +91,55 @@ async function handlePriceUpdate(data) {
         const redisKey = `checkpoint:${symbol}`;
 
         let redisCheckpoint = await redis.hgetall(redisKey);
-        if (!redisCheckpoint || Object.keys(redisCheckpoint).length === 0) {
-            await redis.hset(redisKey, {
-                current: price || buyPrice,
-                direction: "",
-                initialTraded: 0
-            });
-            return;
-        }
-
+        const checkpointExists = redisCheckpoint && Object.keys(redisCheckpoint).length > 0;
         const current = parseFloat(redisCheckpoint.current);
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
 
-        // 🥇 Initial trade logic
+        // 🥇 Initial trade logic for all strategies
         if (!initialTraded) {
-            const initialDirection = price > current ? "BUY" : "SELL";
+            const initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
             const tradePrice = initialDirection === "BUY" ? buyPrice : price;
-            const initialCP = roundTo3(price);
+
+            let initialCheckpoint;
+            if (strategy === STRATEGY.REVERSAL) {
+                // For REVERSAL, checkpoint is in opposite direction
+                initialCheckpoint = roundTo3(
+                    initialDirection === "BUY"
+                        ? tradePrice - gap
+                        : tradePrice + gap
+                );
+            } else {
+                initialCheckpoint = roundTo3(price);
+            }
+
             await redis.hset(redisKey, {
-                current: initialCP,
+                current: initialCheckpoint,
                 direction: initialDirection,
                 initialTraded: 1
             });
+
             await redis.hset(`symbol_config:${symbol}`, {
                 symbol,
                 GAP: gap,
                 ECLIPSE_BUFFER: 0
             });
-            const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCP, gap);
-            logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade | Current: ${initialCP} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
+
+            const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCheckpoint, gap);
+            logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade (${strategy}) | CP: ${initialCheckpoint} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
             await sendTrade(symbol, tradePrice, initialDirection, strategy);
             return;
         }
 
         if (strategy === STRATEGY.STATIC) {
-            // 🚦 Strategy Logic: Single checkpoint crossing
-            const lastCheckpoint = parseFloat(redisCheckpoint.current);
-            const lastDirection = redisCheckpoint.direction;
+            const lastCheckpoint = current;
+            const lastDirection = direction;
 
-            // BUY logic: crossing upward
             if (price > lastCheckpoint && lastDirection !== "BUY") {
                 logger.info(`📈 ${symbol} | Price: ${price} > CP: ${lastCheckpoint} | → BUY`);
                 await redis.hset(redisKey, { direction: "BUY" });
                 await sendTrade(symbol, buyPrice, "BUY", strategy);
-            }
-
-            // SELL logic: crossing downward
-            else if (price < lastCheckpoint && lastDirection !== "SELL") {
+            } else if (price < lastCheckpoint && lastDirection !== "SELL") {
                 logger.info(`📉 ${symbol} | Price: ${price} < CP: ${lastCheckpoint} | → SELL`);
                 await redis.hset(redisKey, { direction: "SELL" });
                 await sendTrade(symbol, price, "SELL", strategy);
@@ -146,7 +147,6 @@ async function handlePriceUpdate(data) {
         }
 
         if (strategy === STRATEGY.TRAILING) {
-
             const updateCheckpoint = async (updatedCP, newDirection, shouldTrade = true) => {
                 const roundedCP = roundTo3(updatedCP);
                 await redis.hset(redisKey, {
@@ -188,15 +188,9 @@ async function handlePriceUpdate(data) {
                 }
 
                 if (cond) {
-                    logger.warn({
-                        event: "ENTER SELL",
-                        cond: `price < current: ${cond}`,
-                        price,
-                        current,
-                    });
+                    logger.warn({ event: "ENTER SELL", cond, price, current });
                     await updateCheckpoint(price, "SELL", true);
                 }
-
             } else if (direction === "SELL") {
                 const cond = buyPrice > current;
 
@@ -206,14 +200,34 @@ async function handlePriceUpdate(data) {
                 }
 
                 if (cond) {
-                    logger.warn({
-                        event: "ENTER BUY",
-                        cond: `buyPrice > current: ${cond}`,
-                        buyPrice,
-                        current,
-                    });
+                    logger.warn({ event: "ENTER BUY", cond, buyPrice, current });
                     await updateCheckpoint(buyPrice, "BUY", true);
                 }
+            }
+        }
+
+        if (strategy === STRATEGY.REVERSAL) {
+            const reverseCheckpoint = current;
+            if (direction === "BUY" && price <= reverseCheckpoint) {
+                const nextCP = roundTo3(price + gap);
+                await redis.hset(redisKey, {
+                    current: nextCP,
+                    direction: "SELL",
+                    initialTraded: 1
+                });
+                logger.info(`🔄 ${symbol} | REVERSAL | BUY → SELL | Crossed: ${reverseCheckpoint} → Next CP: ${nextCP}`);
+                await sendTrade(symbol, price, "SELL", strategy);
+            }
+
+            if (direction === "SELL" && buyPrice >= reverseCheckpoint) {
+                const prevCP = roundTo3(buyPrice - gap);
+                await redis.hset(redisKey, {
+                    current: prevCP,
+                    direction: "BUY",
+                    initialTraded: 1
+                });
+                logger.info(`🔄 ${symbol} | REVERSAL | SELL → BUY | Crossed: ${reverseCheckpoint} → Next CP: ${prevCP}`);
+                await sendTrade(symbol, buyPrice, "BUY", strategy);
             }
         }
 

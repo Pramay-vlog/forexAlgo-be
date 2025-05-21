@@ -21,7 +21,7 @@ module.exports = {
             // Store full config as hash
             await redis.hset(`symbol_config:${symbol}`, {
                 symbol,
-                GAP: STRATEGY.TRAILING === strategy ? GAP : 0,
+                GAP: (STRATEGY.TRAILING === strategy || STRATEGY.REVERSAL === strategy) ? GAP : 0,
                 ECLIPSE_BUFFER,
                 volume,
                 strategy,
@@ -31,7 +31,7 @@ module.exports = {
             sendMessageToDLL({
                 action: "SUBSCRIBE",
                 symbol,
-                GAP: STRATEGY.TRAILING === strategy ? GAP : 0,
+                GAP: (STRATEGY.TRAILING === strategy || STRATEGY.REVERSAL === strategy) ? GAP : 0,
                 ECLIPSE_BUFFER,
                 volume,
                 strategy,
@@ -39,7 +39,7 @@ module.exports = {
 
             await DB.TRADE.create({
                 symbol,
-                gap: STRATEGY.TRAILING === strategy ? GAP : 0,
+                gap: (STRATEGY.TRAILING === strategy || STRATEGY.REVERSAL === strategy) ? GAP : 0,
                 eclipseBuffer: ECLIPSE_BUFFER,
                 volume,
                 strategy,
