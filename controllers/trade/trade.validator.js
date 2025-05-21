@@ -8,7 +8,11 @@ module.exports = {
     Trade: validator({
         body: Joi.object({
             symbol: Joi.string().required(),
-            GAP: Joi.number().required(),
+            GAP: Joi.when('strategy', {
+                is: STRATEGY.STATIC,
+                then: Joi.optional(),
+                otherwise: Joi.number().required()
+            }),
             ECLIPSE_BUFFER: Joi.number().required(),
             volume: Joi.number().required(),
             strategy: Joi.string().valid(...Object.values(STRATEGY)).required(),

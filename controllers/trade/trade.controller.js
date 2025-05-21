@@ -2,6 +2,7 @@ const DB = require("../../models");
 const { response } = require("../../helpers");
 const { redis } = require("../../config/redis.config");
 const { sendMessageToDLL } = require("../../service/tcp/tcpClient.service");
+const { constants: { ENUM: { STRATEGY } } } = require("../../helpers");
 
 const ACTIVE_SYMBOLS_KEY = "active:symbols";
 
@@ -20,7 +21,7 @@ module.exports = {
             // Store full config as hash
             await redis.hset(`symbol_config:${symbol}`, {
                 symbol,
-                GAP,
+                GAP: STRATEGY.TRAILING === strategy ? GAP : 0,
                 ECLIPSE_BUFFER,
                 volume,
                 strategy,
@@ -30,7 +31,7 @@ module.exports = {
             sendMessageToDLL({
                 action: "SUBSCRIBE",
                 symbol,
-                GAP,
+                GAP: STRATEGY.TRAILING === strategy ? GAP : 0,
                 ECLIPSE_BUFFER,
                 volume,
                 strategy,
@@ -38,7 +39,7 @@ module.exports = {
 
             await DB.TRADE.create({
                 symbol,
-                gap: GAP,
+                gap: STRATEGY.TRAILING === strategy ? GAP : 0,
                 eclipseBuffer: ECLIPSE_BUFFER,
                 volume,
                 strategy,
