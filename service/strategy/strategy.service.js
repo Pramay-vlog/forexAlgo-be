@@ -82,13 +82,15 @@ async function sendTrade(symbol, price, direction, strategy, reason = "signal") 
 async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
-        const { symbol, bid, ask, GAP: dynamicGAP, strategy } = parsed;
+        const { symbol, bid, ask, GAP: dynamicGAP, strategy, previousBid, previousAsk } = parsed;
 
         if (!symbol || typeof bid !== "number") return;
         if (!Object.values(STRATEGY).includes(strategy)) return;
 
         const buyPrice = roundTo3(ask);
         const price = roundTo3(bid);
+        const prevBid = roundTo3(previousBid ?? bid);
+        const prevAsk = roundTo3(previousAsk ?? ask);
         const gap = dynamicGAP > 0 ? dynamicGAP : 2;
         const redisKey = `checkpoint:${symbol}`;
 
@@ -98,21 +100,14 @@ async function handlePriceUpdate(data) {
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
 
-        // 🥇 Initial trade logic for all strategies
+        // 🥇 Initial trade logic
         if (!initialTraded) {
             const initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
             const tradePrice = initialDirection === "BUY" ? buyPrice : price;
 
-            let initialCheckpoint;
-            if (strategy === STRATEGY.REVERSAL) {
-                initialCheckpoint = roundTo3(
-                    initialDirection === "BUY"
-                        ? tradePrice - gap
-                        : tradePrice + gap
-                );
-            } else {
-                initialCheckpoint = roundTo3(price);
-            }
+            let initialCheckpoint = strategy === STRATEGY.REVERSAL
+                ? roundTo3(initialDirection === "BUY" ? tradePrice - gap : tradePrice + gap)
+                : roundTo3(price);
 
             await redis.hset(redisKey, {
                 current: initialCheckpoint,
@@ -234,18 +229,24 @@ async function handlePriceUpdate(data) {
                 return;
             }
 
-            // 🛠️ Maintain trailing CP
-            let trailingCP = direction === "BUY"
-                ? roundTo3(buyPrice - gap)
-                : roundTo3(price + gap);
+            // 🛠️ Maintain trailing CP ONLY if price has gone deeper in same direction
+            const deeperInDirection =
+                (direction === "BUY" && ask > prevAsk) ||
+                (direction === "SELL" && bid < prevBid);
 
-            if (trailingCP !== reverseCheckpoint) {
-                logger.info(`🔧 ${symbol} | REVERSAL | Adjust CP → ${trailingCP}`);
-                await redis.hset(redisKey, {
-                    current: trailingCP,
-                    direction,
-                    initialTraded: 1
-                });
+            if (deeperInDirection) {
+                let trailingCP = direction === "BUY"
+                    ? roundTo3(buyPrice - gap)
+                    : roundTo3(price + gap);
+
+                if (trailingCP !== reverseCheckpoint) {
+                    logger.info(`🔧 ${symbol} | REVERSAL | Adjust CP → ${trailingCP}`);
+                    await redis.hset(redisKey, {
+                        current: trailingCP,
+                        direction,
+                        initialTraded: 1
+                    });
+                }
             }
         }
 
