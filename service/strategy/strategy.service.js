@@ -210,7 +210,6 @@ async function handlePriceUpdate(data) {
         if (strategy === STRATEGY.REVERSAL) {
             const reverseCheckpoint = current;
 
-            // 1. Check for reversal
             if (direction === "BUY" && price <= reverseCheckpoint) {
                 const nextCP = roundTo3(price + gap);
                 await redis.hset(redisKey, {
@@ -235,21 +234,12 @@ async function handlePriceUpdate(data) {
                 return;
             }
 
-            // 2. Maintain trailing CP — only if new high/low is made
-            let shouldUpdateCP = false;
-            let trailingCP;
+            // 🛠️ Maintain trailing CP
+            let trailingCP = direction === "BUY"
+                ? roundTo3(buyPrice - gap)
+                : roundTo3(price + gap);
 
-            if (direction === "BUY" && price > buyPrice) {
-                trailingCP = roundTo3(price - gap);
-                shouldUpdateCP = trailingCP !== reverseCheckpoint;
-            }
-
-            if (direction === "SELL" && buyPrice < price) {
-                trailingCP = roundTo3(buyPrice + gap);
-                shouldUpdateCP = trailingCP !== reverseCheckpoint;
-            }
-
-            if (shouldUpdateCP) {
+            if (trailingCP !== reverseCheckpoint) {
                 logger.info(`🔧 ${symbol} | REVERSAL | Adjust CP → ${trailingCP}`);
                 await redis.hset(redisKey, {
                     current: trailingCP,
