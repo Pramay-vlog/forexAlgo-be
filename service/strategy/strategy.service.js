@@ -82,19 +82,27 @@ async function sendTrade(symbol, price, direction, strategy, reason = "signal") 
 async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
-        const { symbol, bid, ask, GAP: dynamicGAP, strategy, previousBid, previousAsk } = parsed;
+        const { symbol, bid, ask, previousBid, previousAsk, GAP: dynamicGAP, strategy } = parsed;
 
-        if (!symbol || typeof bid !== "number") return;
+        if (!symbol || typeof bid !== "number" || typeof ask !== "number") return;
         if (!Object.values(STRATEGY).includes(strategy)) return;
 
-        const buyPrice = roundTo3(ask);
-        const price = roundTo3(bid);
-        const prevBid = roundTo3(previousBid ?? bid);
-        const prevAsk = roundTo3(previousAsk ?? ask);
+        const roundTo3 = num => parseFloat(num.toFixed(3));
+        const epsilon = 0.0001;
+
+        const rawBid = bid;
+        const rawAsk = ask;
+        const rawPrevBid = typeof previousBid === "number" ? previousBid : bid;
+        const rawPrevAsk = typeof previousAsk === "number" ? previousAsk : ask;
+        console.log('🚀 ~ ~ prevBid:', rawPrevBid, ' ~ ~ bid', rawBid);
+        console.log('🚀 ~ ~ prevAsk:', rawPrevAsk, ' ~ ~ ask', rawAsk);
+
+        const price = roundTo3(rawBid);
+        const buyPrice = roundTo3(rawAsk);
         const gap = dynamicGAP > 0 ? dynamicGAP : 2;
         const redisKey = `checkpoint:${symbol}`;
 
-        let redisCheckpoint = await redis.hgetall(redisKey);
+        const redisCheckpoint = await redis.hgetall(redisKey);
         const checkpointExists = redisCheckpoint && Object.keys(redisCheckpoint).length > 0;
         const current = parseFloat(redisCheckpoint.current);
         const direction = redisCheckpoint.direction;
@@ -105,9 +113,16 @@ async function handlePriceUpdate(data) {
             const initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
             const tradePrice = initialDirection === "BUY" ? buyPrice : price;
 
-            let initialCheckpoint = strategy === STRATEGY.REVERSAL
-                ? roundTo3(initialDirection === "BUY" ? tradePrice - gap : tradePrice + gap)
-                : roundTo3(price);
+            let initialCheckpoint;
+            if (strategy === STRATEGY.REVERSAL) {
+                initialCheckpoint = roundTo3(
+                    initialDirection === "BUY"
+                        ? tradePrice - gap
+                        : tradePrice + gap
+                );
+            } else {
+                initialCheckpoint = roundTo3(price);
+            }
 
             await redis.hset(redisKey, {
                 current: initialCheckpoint,
@@ -205,6 +220,7 @@ async function handlePriceUpdate(data) {
         if (strategy === STRATEGY.REVERSAL) {
             const reverseCheckpoint = current;
 
+            // 🔁 Reversal logic
             if (direction === "BUY" && price <= reverseCheckpoint) {
                 const nextCP = roundTo3(price + gap);
                 await redis.hset(redisKey, {
@@ -229,17 +245,18 @@ async function handlePriceUpdate(data) {
                 return;
             }
 
-            // 🛠️ Maintain trailing CP ONLY if price has gone deeper in same direction
-            const deeperInDirection =
-                (direction === "BUY" && ask > prevAsk) ||
-                (direction === "SELL" && bid < prevBid);
+            // 🛠️ Maintain trailing CP only if deeper in same direction
+            const deeper =
+                direction === "BUY"
+                    ? rawAsk > rawPrevAsk
+                    : rawBid < rawPrevBid;
 
-            if (deeperInDirection) {
-                let trailingCP = direction === "BUY"
-                    ? roundTo3(buyPrice - gap)
-                    : roundTo3(price + gap);
+            if (deeper) {
+                const trailingCP = direction === "BUY"
+                    ? roundTo3(rawAsk - gap)
+                    : roundTo3(rawBid + gap);
 
-                if (trailingCP !== reverseCheckpoint) {
+                if (Math.abs(trailingCP - reverseCheckpoint) > epsilon) {
                     logger.info(`🔧 ${symbol} | REVERSAL | Adjust CP → ${trailingCP}`);
                     await redis.hset(redisKey, {
                         current: trailingCP,
