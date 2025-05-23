@@ -99,7 +99,7 @@ async function handlePriceUpdate(data) {
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
 
-        // 🥇 Initial trade logic
+        // 🥇 Initial trade.
         if (!initialTraded) {
             const initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
             const tradePrice = initialDirection === "BUY" ? buyPrice : price;
