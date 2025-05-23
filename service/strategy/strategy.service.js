@@ -5,10 +5,6 @@ const { constants: { ENUM: { STRATEGY } } } = require('../../helpers');
 let RANGE = 5;
 const TRADE_HISTORY_QUEUE = "queue:trade_history";
 
-function roundTo3(num) {
-    return parseFloat(num.toFixed(3));
-}
-
 function generateCheckpointRangeFromPrice(price, gap) {
     const base = Math.floor(price / gap) * gap;
     const prevs = Array.from({ length: RANGE }, (_, i) => base - gap * (i + 1)).reverse();
@@ -98,17 +94,34 @@ async function handlePriceUpdate(data) {
         const redisKey = `checkpoint:${symbol}`;
 
         const redisCheckpoint = await redis.hgetall(redisKey);
-        const checkpointExists = redisCheckpoint && Object.keys(redisCheckpoint).length > 0;
         const current = parseFloat(redisCheckpoint.current);
         const direction = redisCheckpoint.direction;
         const initialTraded = redisCheckpoint.initialTraded === "1";
 
         // 🥇 Initial trade logic
         if (!initialTraded) {
-            const initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
-            const tradePrice = initialDirection === "BUY" ? buyPrice : price;
+            const symbolConfig = await redis.hgetall(`symbol_config:${symbol}`);
+            const ECLIPSE_BUFFER = parseFloat(symbolConfig?.ECLIPSE_BUFFER || 0);
 
-            let initialCheckpoint;
+            // Threshold range from current price
+            const upperLimit = price + ECLIPSE_BUFFER;
+            const lowerLimit = price - ECLIPSE_BUFFER;
+
+            let initialDirection = null;
+            let tradePrice = null;
+            let initialCheckpoint = null;
+
+            if (price >= upperLimit) {
+                initialDirection = "BUY";
+                tradePrice = buyPrice;
+            } else if (price <= lowerLimit) {
+                initialDirection = "SELL";
+                tradePrice = price;
+            } else {
+                logger.info(`🛑 ${symbol} | No initial trade. Price=${price} inside ECLIPSE_BUFFER zone [${lowerLimit}, ${upperLimit}]`);
+                return;
+            }
+
             if (strategy === STRATEGY.REVERSAL) {
                 initialCheckpoint = roundTo3(
                     initialDirection === "BUY"
@@ -128,7 +141,7 @@ async function handlePriceUpdate(data) {
             await redis.hset(`symbol_config:${symbol}`, {
                 symbol,
                 GAP: gap,
-                ECLIPSE_BUFFER: 0
+                ECLIPSE_BUFFER
             });
 
             const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCheckpoint, gap);
