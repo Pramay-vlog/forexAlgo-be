@@ -16,6 +16,11 @@ module.exports = {
             ECLIPSE_BUFFER: Joi.number().required(),
             volume: Joi.number().required(),
             strategy: Joi.string().valid(...Object.values(STRATEGY)).required(),
+            direction: Joi.when('strategy', {
+                is: STRATEGY.REVERSAL,
+                then: Joi.string().valid('BUY', 'SELL').required(),
+                otherwise: Joi.string().valid('BUY', 'SELL').optional()
+            })
         }),
     }),
 

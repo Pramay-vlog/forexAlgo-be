@@ -101,9 +101,32 @@ async function handlePriceUpdate(data) {
 
         // 🥇 Initial trade.
         if (!initialTraded) {
-            const initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
+            const ECLIPSE_BUFFER = parseFloat(redisCheckpoint.ECLIPSE_BUFFER) || 0;
+
+            // Fetch predefined direction for REVERSE strategy
+            let initialDirection;
+            if (strategy === STRATEGY.REVERSAL) {
+                const redisSymbolConfig = await redis.hgetall(`symbol_config:${symbol}`);
+                initialDirection = redisSymbolConfig?.direction;
+                if (!initialDirection) {
+                    logger.error(`⛔️ ${symbol}: Missing 'direction' in symbol_config for REVERSAL strategy.`);
+                    return;
+                }
+            } else {
+                // For STATIC or TRAILING, calculate direction only if eclipse buffer is crossed
+                const bufferCrossed = Math.abs(price - current) >= ECLIPSE_BUFFER;
+
+                if (checkpointExists && !bufferCrossed) {
+                    logger.info(`🛑 ${symbol}: Waiting for eclipse buffer | Price: ${price} | CP: ${current} | Gap: ${gap} | Buffer: ${ECLIPSE_BUFFER}`);
+                    return;
+                }
+
+                initialDirection = price > (checkpointExists ? current : price) ? "BUY" : "SELL";
+            }
+
             const tradePrice = initialDirection === "BUY" ? buyPrice : price;
 
+            // Compute initial checkpoint
             let initialCheckpoint;
             if (strategy === STRATEGY.REVERSAL) {
                 initialCheckpoint = roundTo3(
@@ -115,16 +138,19 @@ async function handlePriceUpdate(data) {
                 initialCheckpoint = roundTo3(price);
             }
 
+            // Set checkpoint state
             await redis.hset(redisKey, {
                 current: initialCheckpoint,
                 direction: initialDirection,
                 initialTraded: 1
             });
 
+            // Store config (preserve direction if from REVERSAL)
             await redis.hset(`symbol_config:${symbol}`, {
                 symbol,
                 GAP: gap,
-                ECLIPSE_BUFFER: 0
+                ECLIPSE_BUFFER: ECLIPSE_BUFFER || 0,
+                ...(strategy === STRATEGY.REVERSAL && { direction: initialDirection })
             });
 
             const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCheckpoint, gap);
