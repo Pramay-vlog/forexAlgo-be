@@ -7,6 +7,7 @@ let tradeSchema = new Schema(
         eclipseBuffer: Number,
         volume: Number,
         strategy: String,
+        direction: String,
         isActive: {
             type: Boolean,
             default: true,
