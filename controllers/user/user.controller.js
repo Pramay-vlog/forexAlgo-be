@@ -7,20 +7,18 @@ module.exports = exports = {
 
 
     signIn: async (req, res) => {
-        const user = await DB.USER.findOne({ email: req.body.email }).populate("roleId", "name").lean();
+        const user = await DB.USER.findOne({ accountId: req.body.accountId }).lean();
         if (!user) return response.NOT_FOUND({ res, MESSAGE: MESSAGE.NOT_FOUND });
 
         const isPasswordMatch = await common.comparePassword({ password: req.body.password, hash: user.password });
         if (!isPasswordMatch) return response.BAD_REQUEST({ res, message: MESSAGE.INVALID_PASSWORD });
 
-        const token = await common.generateToken({ data: { _id: user._id, role: user.roleId.name } });
+        const token = await common.generateToken({ data: { _id: user._id, accountId: user.accountId } });
 
         return response.OK({
             res,
             payload: {
-                email: user.email,
-                name: user.name,
-                role: user.roleId.name,
+                accountId: user.accountId,
                 token,
             },
         });
@@ -28,13 +26,7 @@ module.exports = exports = {
 
 
     signUp: async (req, res) => {
-        if (await DB.USER.findOne({ email: req.body.email })) return response.BAD_REQUEST({ res, message: MESSAGE.DUPLICATE_ENTRY });
-
-        const roleExists = await DB.ROLE.findById(req.body.roleId).lean();
-        if (!roleExists) return response.NOT_FOUND({ res, message: MESSAGE.NOT_FOUND });
-
-        req.body.roleId = roleExists._id;
-
+        if (await DB.USER.findOne({ accountId: req.body.accountId })) return response.BAD_REQUEST({ res, message: MESSAGE.DUPLICATE_ENTRY });
         await DB.USER.create(req.body);
         exports.signIn(req, res);
     },

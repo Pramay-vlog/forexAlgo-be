@@ -1,6 +1,6 @@
 const DB = require("../models");
 const { response, logger } = require('../helpers');
-const { MESSAGE, ENUM: { ROLE } } = require('../helpers/constant.helper');
+const { MESSAGE } = require('../helpers/constant.helper');
 const jwt = require("jsonwebtoken");
 
 module.exports = {
@@ -18,7 +18,7 @@ module.exports = {
                 let decoded = jwt.verify(token, process.env.JWT_SECRET);
                 logger.info(`[DECODED] [ID: ${res.reqId}] [${res.method}] ${res.originalUrl} [CONTENT: ${JSON.stringify(decoded)}]`);
 
-                user = await DB.USER.findOne({ _id: decoded?._id, isActive: true }).populate("roleId").lean();
+                user = await DB.USER.findOne({ _id: decoded?._id, accountId: decoded?.accountId, isActive: true }).lean();
                 if (!user) return response.UNAUTHORIZED({
                     res,
                     message: MESSAGE.INVALID_TOKEN,
@@ -38,16 +38,16 @@ module.exports = {
             req.user = user;
             if (usersAllowed.length) {
 
-                if (req.user.roleId.name === ROLE.ADMIN) return next();
+                // if (req.user.roleId.name === ROLE.ADMIN) return next();
                 if (usersAllowed.includes("*")) return next();
-                if (usersAllowed.includes(req.user.roleId.name)) return next();
+                // if (usersAllowed.includes(req.user.roleId.name)) return next();
 
-                return response.UNAUTHORIZED({ res, message: MESSAGE.INVALID_TOKEN, });
+                // return response.UNAUTHORIZED({ res, message: MESSAGE.INVALID_TOKEN, });
 
             } else {
 
-                if (req.user.roleId.name === ROLE.ADMIN) return next();
-                return response.UNAUTHORIZED({ res, message: MESSAGE.INVALID_TOKEN, });
+                // if (req.user.roleId.name === ROLE.ADMIN) return next();
+                // return response.UNAUTHORIZED({ res, message: MESSAGE.INVALID_TOKEN, });
 
             }
         };

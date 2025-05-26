@@ -9,26 +9,51 @@ async function migrateTradeHistoryBatch(batchSize = 20) {
 
         if (!items || items.length === 0) return;
 
-        const parsedItems = items.map(item => JSON.parse(item));
+        const parsedItems = items.map(item => JSON.parse(item)).filter(i => i.accountId && i.symbol);
 
-        const symbols = [...new Set(parsedItems.map(t => t.symbol))];
-        const tradeDocs = await DB.TRADE.find({ symbol: { $in: symbols }, isActive: true });
-        const symbolToIdMap = {};
-        for (const trade of tradeDocs) {
-            symbolToIdMap[trade.symbol] = trade._id;
+        // Group trade entries by accountId
+        const groupedByAccount = parsedItems.reduce((acc, item) => {
+            if (!acc[item.accountId]) acc[item.accountId] = [];
+            acc[item.accountId].push(item);
+            return acc;
+        }, {});
+
+        const finalDocs = [];
+
+        for (const [accountId, trades] of Object.entries(groupedByAccount)) {
+            const symbols = [...new Set(trades.map(t => t.symbol))];
+
+            const tradeDocs = await DB.TRADE.find({
+                accountId,
+                symbol: { $in: symbols },
+                isActive: true
+            });
+
+            const symbolToTradeId = {};
+            for (const trade of tradeDocs) {
+                symbolToTradeId[trade.symbol] = trade._id;
+            }
+
+            for (const trade of trades) {
+                const tradeId = symbolToTradeId[trade.symbol];
+                if (!tradeId) continue;
+
+                finalDocs.push({
+                    tradeId,
+                    price: trade.price,
+                    action: trade.action,
+                    direction: trade.direction,
+                    checkpoint: trade.checkpoint,
+                    createdAt: trade.createdAt,
+                });
+            }
         }
 
-        const finalDocs = parsedItems.map(item => ({
-            tradeId: symbolToIdMap[item.symbol],
-            price: item.price,
-            action: item.action,
-            direction: item.direction,
-            checkpoint: item.checkpoint,
-            createdAt: item.createdAt,
-        })).filter(doc => doc.tradeId); // Remove ones that don't match an active trade
+        if (finalDocs.length > 0) {
+            await DB.TRADE_HISTORY.insertMany(finalDocs, { ordered: false });
+        }
 
-        await DB.TRADE_HISTORY.insertMany(finalDocs, { ordered: false });
-        await redis.ltrim(TRADE_HISTORY_QUEUE, items.length, -1);
+        await redis.ltrim(TRADE_HISTORY_QUEUE, parsedItems.length, -1);
 
         console.log(`✅ Migrated ${finalDocs.length} trade history records to MongoDB.`);
     } catch (err) {

@@ -2,6 +2,7 @@ const { Schema, model } = require("mongoose");
 
 let tradeSchema = new Schema(
     {
+        accountId: Number,
         symbol: String,
         gap: Number,
         eclipseBuffer: Number,

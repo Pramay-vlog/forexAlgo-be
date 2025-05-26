@@ -28,11 +28,11 @@ function findClosestLevels(price, prevs, nexts) {
     return { cp: null, direction: null };
 }
 
-async function sendTrade(symbol, price, direction, strategy, reason = "signal") {
+async function sendTrade({ symbol, price, direction, strategy, reason = "signal", accountId }) {
     try {
         const [symbolConfig, checkpoint] = await Promise.all([
-            redis.hgetall(`symbol_config:${symbol}`),
-            redis.hgetall(`checkpoint:${symbol}`)
+            redis.hgetall(`account:${accountId}:symbol_config:${symbol}`), // Update the key
+            redis.hgetall(`account:${accountId}:checkpoint:${symbol}`) // Update the key
         ]);
 
         const GAP = parseFloat(symbolConfig.GAP) || 0;
@@ -78,10 +78,14 @@ async function sendTrade(symbol, price, direction, strategy, reason = "signal") 
 async function handlePriceUpdate(data) {
     try {
         const parsed = typeof data === "string" ? JSON.parse(data) : data;
-        const { symbol, bid, ask, GAP: dynamicGAP, strategy } = parsed;
+        const { symbol, bid, ask, GAP: dynamicGAP, strategy, accountId } = parsed;
 
         if (!symbol || typeof bid !== "number" || typeof ask !== "number") return;
         if (!Object.values(STRATEGY).includes(strategy)) return;
+        if (!accountId) {
+            logger.error("Missing accountId in incoming price message");
+            return;
+        }
 
         const roundTo3 = num => parseFloat(num.toFixed(3));
 
@@ -91,7 +95,8 @@ async function handlePriceUpdate(data) {
         const price = roundTo3(rawBid);
         const buyPrice = roundTo3(rawAsk);
         const gap = dynamicGAP > 0 ? dynamicGAP : 2;
-        const redisKey = `checkpoint:${symbol}`;
+        const redisKey = `account:${accountId}:checkpoint:${symbol}`;
+        const configKey = `account:${accountId}:symbol_config:${symbol}`;
 
         const redisCheckpoint = await redis.hgetall(redisKey);
         const checkpointExists = redisCheckpoint && Object.keys(redisCheckpoint).length > 0;
@@ -106,7 +111,7 @@ async function handlePriceUpdate(data) {
             // Fetch predefined direction for REVERSE strategy
             let initialDirection;
             if (strategy === STRATEGY.REVERSAL) {
-                const redisSymbolConfig = await redis.hgetall(`symbol_config:${symbol}`);
+                const redisSymbolConfig = await redis.hgetall(configKey);
                 initialDirection = redisSymbolConfig?.direction;
                 if (!initialDirection) {
                     logger.error(`⛔️ ${symbol}: Missing 'direction' in symbol_config for REVERSAL strategy.`);
@@ -146,7 +151,7 @@ async function handlePriceUpdate(data) {
             });
 
             // Store config (preserve direction if from REVERSAL)
-            await redis.hset(`symbol_config:${symbol}`, {
+            await redis.hset(configKey, {
                 symbol,
                 GAP: gap,
                 ECLIPSE_BUFFER: ECLIPSE_BUFFER || 0,
@@ -155,7 +160,7 @@ async function handlePriceUpdate(data) {
 
             const { prevs, nexts } = generateCheckpointRangeFromPrice(initialCheckpoint, gap);
             logger.info(`🥇 ${symbol}: ${tradePrice} | Initial Trade (${strategy}) | CP: ${initialCheckpoint} | Prev: ${prevs.at(-1)} | Next: ${nexts[0]}`);
-            await sendTrade(symbol, tradePrice, initialDirection, strategy, "initial");
+            await sendTrade({ symbol, price: tradePrice, direction: initialDirection, strategy, reason: "initial", accountId });
             return;
         }
 
@@ -166,11 +171,11 @@ async function handlePriceUpdate(data) {
             if (price > lastCheckpoint && lastDirection !== "BUY") {
                 logger.info(`📈 ${symbol} | Price: ${price} > CP: ${lastCheckpoint} | → BUY`);
                 await redis.hset(redisKey, { direction: "BUY" });
-                await sendTrade(symbol, buyPrice, "BUY", strategy);
+                await sendTrade({ symbol, price: buyPrice, direction: "BUY", strategy, accountId });
             } else if (price < lastCheckpoint && lastDirection !== "SELL") {
                 logger.info(`📉 ${symbol} | Price: ${price} < CP: ${lastCheckpoint} | → SELL`);
                 await redis.hset(redisKey, { direction: "SELL" });
-                await sendTrade(symbol, price, "SELL", strategy);
+                await sendTrade({ symbol, price, direction: "SELL", strategy, accountId });
             }
         }
 
@@ -191,7 +196,7 @@ async function handlePriceUpdate(data) {
                 const message = `🔁 ${symbol}: ${tradePrice} | 🍭 Checkpoint: ${roundedCP} | ⬅️ Prev: ${prev} | ➡️ Next: ${next}`;
                 if (shouldTrade) {
                     logger.info(`✅ Trade Triggered | ${message}`);
-                    await sendTrade(symbol, tradePrice, newDirection, strategy);
+                    await sendTrade({ symbol, price: tradePrice, direction: newDirection, strategy, accountId });
                 } else {
                     await redis.rpush(TRADE_HISTORY_QUEUE, JSON.stringify({
                         symbol,
@@ -246,7 +251,7 @@ async function handlePriceUpdate(data) {
                     initialTraded: 1
                 });
                 logger.info(`🔄 ${symbol} | REVERSAL | BUY → SELL | Crossed: ${reverseCheckpoint} → New CP: ${nextCP}`);
-                await sendTrade(symbol, price, "SELL", strategy);
+                await sendTrade({ symbol, price, direction: "SELL", strategy, accountId });
                 return;
             }
 
@@ -258,7 +263,7 @@ async function handlePriceUpdate(data) {
                     initialTraded: 1
                 });
                 logger.info(`🔄 ${symbol} | REVERSAL | SELL → BUY | Crossed: ${reverseCheckpoint} → New CP: ${nextCP}`);
-                await sendTrade(symbol, buyPrice, "BUY", strategy);
+                await sendTrade({ symbol, price: buyPrice, direction: "BUY", strategy, accountId });
                 return;
             }
 
@@ -284,7 +289,6 @@ async function handlePriceUpdate(data) {
                     });
                 }
             }
-
         }
 
     } catch (err) {

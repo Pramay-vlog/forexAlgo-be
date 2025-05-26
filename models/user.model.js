@@ -5,14 +5,8 @@ const { logger } = require('../helpers');
 
 const userSchema = new Schema(
     {
-        email: String,
-        name: String,
+        accountId: Number,
         password: String,
-        roleId: {
-            type: Schema.Types.ObjectId,
-            ref: "Role",
-            required: true,
-        },
         isActive: {
             type: Boolean,
             default: true,

@@ -6,17 +6,15 @@ module.exports = {
 
     signup: validator({
         body: Joi.object({
-            email: Joi.string().required(),
+            accountId: Joi.number().required(),
             password: Joi.string().required(),
-            name: Joi.string(),
-            roleId: Joi.string().required(),
         }),
     }),
 
 
     signIn: validator({
         body: Joi.object({
-            email: Joi.string().required(),
+            accountId: Joi.number().required(),
             password: Joi.string().required(),
         }),
     }),
