@@ -36,10 +36,10 @@ module.exports = {
 
 
             req.user = user;
+            return next();
             if (usersAllowed.length) {
-
                 // if (req.user.roleId.name === ROLE.ADMIN) return next();
-                if (usersAllowed.includes("*")) return next();
+                // if (usersAllowed.includes("*")) return next();
                 // if (usersAllowed.includes(req.user.roleId.name)) return next();
 
                 // return response.UNAUTHORIZED({ res, message: MESSAGE.INVALID_TOKEN, });
