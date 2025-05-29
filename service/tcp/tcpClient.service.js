@@ -3,10 +3,26 @@ const { logger } = require("../../helpers");
 const { handlePriceUpdate } = require("../strategy/strategy.service");
 
 const TCP_PORT = 5050;
+const HEARTBEAT_INTERVAL_MS = 10000; // 10 seconds
 
 function startTCPServer() {
   const server = net.createServer((socket) => {
     logger.info("📡 [TCP] DLL connected.");
+
+    // ✅ Enable TCP keep-alive on socket
+    socket.setKeepAlive(true, 60000); // Enable after 60 seconds of idle
+
+    // ✅ Start heartbeat interval
+    const heartbeatInterval = setInterval(() => {
+      if (socket.destroyed) {
+        clearInterval(heartbeatInterval);
+        return;
+      }
+
+      const heartbeatMsg = JSON.stringify({ type: "heartbeat", timestamp: Date.now() });
+      socket.write(heartbeatMsg + "\n");
+      logger.debug(`💓 [TCP] Sent heartbeat to DLL.`);
+    }, HEARTBEAT_INTERVAL_MS);
 
     let buffer = "";
 
@@ -30,10 +46,12 @@ function startTCPServer() {
     });
 
     socket.on("close", () => {
+      clearInterval(heartbeatInterval);
       logger.warn("❌ [TCP] DLL disconnected.");
     });
 
     socket.on("error", (err) => {
+      clearInterval(heartbeatInterval);
       logger.error("⚠️ [TCP] Error:", err.message);
     });
 
