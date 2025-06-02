@@ -24,7 +24,7 @@ module.exports = (schema) => async (req, res, next) => {
             return response.BAD_REQUEST({
                 res,
                 message: `Validation failed for ${path}.`,
-                data: { context, fieldsAccepted: Object.keys(schema[path].describe().keys) }
+                payload: { context, fieldsAccepted: Object.keys(schema[path].describe().keys) }
             });
 
         }

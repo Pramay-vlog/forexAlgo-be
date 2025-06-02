@@ -64,7 +64,8 @@ async function sendTrade({ symbol, price, direction, strategy, reason = "signal"
             direction: checkpoint.direction || "",
             checkpoint: parseFloat(checkpoint.current) || 0,
             createdAt: new Date(),
-            reason
+            reason,
+            accountId
         }));
 
         const { sendMessageToDLL } = require("../tcp/tcpClient.service");
@@ -204,7 +205,8 @@ async function handlePriceUpdate(data) {
                         action: "SKIP",
                         direction: newDirection,
                         checkpoint: roundedCP,
-                        createdAt: new Date()
+                        createdAt: new Date(),
+                        accountId
                     }));
                 }
             };
