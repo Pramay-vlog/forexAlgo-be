@@ -19,7 +19,7 @@ function startTCPServer() {
         return;
       }
 
-      const heartbeatMsg = JSON.stringify({ type: "heartbeat", timestamp: Date.now() });
+      const heartbeatMsg = JSON.stringify({ action: "HEARTBEAT", timestamp: Date.now() });
       socket.write(heartbeatMsg + "\n");
       logger.debug(`💓 [TCP] Sent heartbeat to DLL.`);
     }, HEARTBEAT_INTERVAL_MS);

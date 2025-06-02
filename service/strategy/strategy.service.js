@@ -272,6 +272,7 @@ async function handlePriceUpdate(data) {
             // 🛠️ Maintain trailing CP only if deeper in same direction
             if (direction === "BUY") {
                 const proposedCP = roundTo3(rawAsk - gap);
+                console.log('🚀 ~ handlePriceUpdate ~ proposedCP:', proposedCP, ', reverseCheckpoint:', reverseCheckpoint, ', proposedCP > reverseCheckpoint:', proposedCP > reverseCheckpoint);
                 if (proposedCP > reverseCheckpoint) {
                     logger.info(`🔧 ${symbol} | REVERSAL | Adjust CP → ${proposedCP}`);
                     await redis.hset(redisKey, {
@@ -282,6 +283,7 @@ async function handlePriceUpdate(data) {
                 }
             } else if (direction === "SELL") {
                 const proposedCP = roundTo3(rawBid + gap);
+                console.log('🚀 ~ handlePriceUpdate ~ proposedCP:', proposedCP, ', reverseCheckpoint:', reverseCheckpoint, ', proposedCP < reverseCheckpoint:', proposedCP < reverseCheckpoint);
                 if (proposedCP < reverseCheckpoint) {
                     logger.info(`🔧 ${symbol} | REVERSAL | Adjust CP → ${proposedCP}`);
                     await redis.hset(redisKey, {
