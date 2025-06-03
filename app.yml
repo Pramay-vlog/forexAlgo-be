@@ -1,7 +1,8 @@
 apps:
   - name: forex-algo
+    script: npm
+    args: run dev
     restart_delay: 100
-    script: npm run dev
     autorestart: true
     env:
       NODE_ENV: development
