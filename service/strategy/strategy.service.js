@@ -113,6 +113,7 @@ async function handlePriceUpdate(data) {
             let initialDirection;
             if (strategy === STRATEGY.REVERSAL) {
                 const redisSymbolConfig = await redis.hgetall(configKey);
+                console.log('🚀 ~ handlePriceUpdate ~ redisSymbolConfig:', redisSymbolConfig);
                 initialDirection = redisSymbolConfig?.direction;
                 if (!initialDirection) {
                     logger.error(`⛔️ ${symbol}: Missing 'direction' in symbol_config for REVERSAL strategy.`);
